@@ -19,6 +19,17 @@ typedef struct il {
   struct il *next;
 } IntList;
 
+typedef struct vd {
+  int v;
+  double d;
+} IntDist;
+
+typedef struct el {
+  int v;
+  double d;
+  struct el *next;
+} EdgeList;
+
 void scan(void);
 void move(void);
 void move2(void);
@@ -49,6 +60,13 @@ int distance_between(Point p1, Point p2) {
 
 void point_print(Point p) {
   printf("(%f, %f)\n", p.x, p.y);
+}
+
+IntList *int_insert(IntList *l, int x) {
+  IntList *i = malloc(sizeof(IntList));
+  i->v = x;
+  i->next = l;
+  return i;
 }
 
 void int_append(IntList *l, int x) {
@@ -111,7 +129,126 @@ void follow_points(void) {
   }
 }
 
-#define RADIUS 220.0
+#define KEY(x) (d[heap[x]].d)
+#define SWAP(x,y) (x) ^= (y); (y) ^= (x); (x) ^= (y)
+#define INFINITY 100000
+
+void heapify(int *heap, IntDist *d, int heapsize, int i) {
+  int l = i*2;
+  int r = i*2 + 1;
+  int min;
+  if(l < heapsize && KEY(l) < KEY(i))
+    min = l;
+  else
+    min = i;
+  if(r < heapsize && KEY(r) < KEY(min))
+    min = r;
+  if(min != i) {
+    SWAP(heap[min], heap[i]);
+    heapify(heap, d, heapsize, min);
+  }
+}
+
+int extract_min(int *heap, IntDist *d, int *heapsize) {
+  int min = heap[0];
+  int i;
+
+  *heapsize = *heapsize-1;
+  heap[0] = heap[*heapsize];
+  heapify(heap, d, *heapsize, 0);
+
+  return min;
+}
+
+void build_heap(int *heap, IntDist *d, int heapsize) {
+  int i;
+  for(i=heapsize/2; i>0; i--)
+    heapify(heap, d, heapsize, i);
+}
+
+/* given the visibility graph as an array of edge lists and the start node,
+   return the shortest path as an array in which d[i] gives the reverse
+   shortest path from start to i */
+IntDist *dijkstra(EdgeList **vis, int num, int start) {
+  IntDist *d = malloc(num*sizeof(IntDist));
+  int heap[num];
+  int heapsize = num;
+  int i;
+
+  for(i=0; i<num; i++) {
+    d[i].d = INFINITY;
+    d[i].v = -1;
+    heap[i] = i;
+  }
+  d[start].d = 0;
+  build_heap(heap, d, heapsize);
+
+  while(heapsize > 0) {
+    EdgeList *edge;
+    i = extract_min(heap, d, &heapsize);
+    edge = vis[i];
+    while(edge) {
+      if(d[edge->v].d > d[i].d + edge->d) {
+	d[edge->v].d = d[i].d + edge->d;
+	d[edge->v].v = i;
+	heapify(heap, d, heapsize, 0);
+      }
+      edge = edge->next;
+    }
+  }
+  
+  return d;
+}
+
+/* takes the d array output by dijkstra and creates a linked list path */
+IntList *d_to_path(IntDist *d, int goal) {
+  IntList *path = 0;
+
+  while(goal >= 0) {
+    path = int_insert(path, goal);
+    goal = d[goal].v;
+  }
+
+  return path;
+}
+
+EdgeList *edge_insert(EdgeList *e, int v, double d) {
+  EdgeList *i = malloc(sizeof(EdgeList));
+  i->v = v;
+  i->d = d;
+  i->next = e;
+  return i;
+}
+
+void edge_print(EdgeList *e) {
+  if(e) {
+    printf("[%d|%f]->", e->v, e->d);
+    edge_print(e->next);
+  }
+  else printf(">\n");
+}
+
+void testDijkstra() {
+  EdgeList *vis[5] = {0, 0, 0, 0, 0};
+  IntDist *d = 0;
+  IntList *path = 0;
+  int i;
+
+  vis[0] = edge_insert(edge_insert(edge_insert(vis[0], 1, 3), 2, 5), 3, 1);
+  vis[1] = edge_insert(edge_insert(vis[1], 0, 3), 2, 2);
+  vis[2] = edge_insert(edge_insert(edge_insert(vis[2], 0, 5), 1, 2), 4, 1);
+  vis[3] = edge_insert(edge_insert(vis[3], 0, 1), 4, 1);
+  vis[4] = edge_insert(edge_insert(vis[4], 3, 1), 2, 1);
+
+  d = dijkstra(vis, 5, 0);
+
+  for(i=1; i<5; i++) {
+    path = d_to_path(d, i);
+    int_print(path);
+  }
+}
+
+#define RADIUS 110.0
 
 IntList *last;
 
@@ -119,8 +256,6 @@ void fast_follow(void) {
   Point pos = get_robot_position();
   int side;
   int th; int d;
-
-  printf("read %f\n", sfTargetHead());
 
   /* special case when on last vertex */
   if(!current->next) {
@@ -150,7 +285,6 @@ void fast_follow(void) {
   /* else do nothing (straight) */
 
   sfSetHeading(th);
-  printf("set %d\n", th);
   sfSetPosition(d);
 }
 
@@ -162,7 +296,7 @@ void myStartup(void)
 
 void myConnect(void)
 {
-  sfSetMaxVelocity(700);
+  sfSetMaxVelocity(600);
   path = malloc(sizeof(IntList));
   path->v = -1;
   path->next = 0;
@@ -185,6 +319,8 @@ int PASCAL
 WinMain (HANDLE hInst, HANDLE hPrevInstance, LPSTR lpszCmdLine, int nCmdShow)
 #endif
 {
+  testDijkstra();
+  return;
   sfOnConnectFn(myConnect);	/* register a connection function */
   sfOnStartupFn(myStartup);	/* register a startup function */
 #ifdef IS_UNIX
