@@ -171,7 +171,9 @@ void build_heap(int *heap, IntDist *d, int heapsize) {
    shortest path from start to i */
 IntDist *dijkstra(EdgeList **vis, int num, int start) {
   IntDist *d = malloc(num*sizeof(IntDist));
-  int heap[num];
+  //rwh not legal in normal c: int heap[num];
+  int * heap = malloc(num*sizeof(int));
+  
   int heapsize = num;
   int i;
 
@@ -196,7 +198,7 @@ IntDist *dijkstra(EdgeList **vis, int num, int start) {
       edge = edge->next;
     }
   }
-  
+  free(heap);
   return d;
 }
 
@@ -316,11 +318,11 @@ void main(int argc, char **argv)
 #endif
 #ifdef MS_WINDOWS
 int PASCAL
-WinMain (HANDLE hInst, HANDLE hPrevInstance, LPSTR lpszCmdLine, int nCmdShow)
+WinMain (HINSTANCE hInst, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int nCmdShow)
 #endif
 {
   testDijkstra();
-  return;
+  //return;
   sfOnConnectFn(myConnect);	/* register a connection function */
   sfOnStartupFn(myStartup);	/* register a startup function */
 #ifdef IS_UNIX
