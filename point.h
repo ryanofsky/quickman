@@ -4,6 +4,9 @@
 #include "math.h"
 #include <vector>
 #include <algorithm>
+#include <assert.h>
+
+#define PI 3.14159265358979323846264338328
 
 using std::sort;
 using std::vector;
@@ -25,6 +28,8 @@ using std::vector;
 template<typename T>
 struct Point
 {
+  typedef T CoordType;
+  
   T x,y;
   
   Point(int x_ = 0, int y_ = 0)
@@ -38,6 +43,9 @@ struct Point
   
   //! Returns this point's orientation relative to a line through PQ
   int inline line_side(Point P, Point Q) const;
+
+  //! You are on a road walking from P to Q... Is this point to the left or to the right of the road?
+  int inline line_rside(Point P, Point Q) const;
   
   //! Convenient addition function
   Point<T> inline operator+(Point<T> c) const;
@@ -111,98 +119,135 @@ int Point<T>::line_side(Point<T> P, Point<T> Q) const
 }
 
 template<typename T>
+int Point<T>::line_rside(Point<T> P, Point<T> Q) const
+{
+  T dx1 = Q.x-P.x;
+  T dy1 = Q.y-P.y; 
+  T dx2 = this->x - P.x;
+  T dy2 = this->y - P.y; 
+  T x1y2 = dx1 * dy2;
+  T x2y1 = dy1 * dx2;
+  
+  if (x1y2 > x2y1)
+    return LEFT_SIDE;
+  else if (x1y2 < x2y1)
+    return RIGHT_SIDE; 
+  else
+  {
+    if (dx1*dx2<0 || dy1*dy2<0)
+      return RIGHT_SIDE;
+    else if (dx1*dx1+dy1*dy1 >= dx2*dx2+dy2*dy2)
+      return LEFT_SIDE | RIGHT_SIDE;
+    else 
+      return LEFT_SIDE;
+  }
+} 
+
+template<typename T>
 bool linesIntersect(Point<T> P1, Point<T> Q1, Point<T> P2, Point<T> Q2)
 {
-  return !(P2.line_side(P1, Q1) & Q2.line_side(P1, Q1) || P1.line_side(P2, Q2) & Q1.line_side(P2, Q2));
+  return !(P2.line_rside(P1, Q1) & Q2.line_rside(P1, Q1) || P1.line_rside(P2, Q2) & Q1.line_rside(P2, Q2));
 }
 
 // This class is only used inside the convexHull function, but for some reason
 // metrowerks won't allow me to instantiate it there if it is declared inside.
 
-template<typename T>
-struct _convexHull_cpoint // cached point
+template<class T>
+struct _convexHull_cpoint
 {
-  typedef Point<T> TPoint;
-  TPoint point;
+  T point;
   double angle;
-  _convexHull_cpoint() { }
-  _convexHull_cpoint(TPoint point_, double angle_) : point(point_), angle(angle_) { } 
+  
+  _convexHull_cpoint() {}
+  
+  _convexHull_cpoint(T point_, double angle_)
+  : point(point_), angle(angle_) { }
 };
 
-template<typename T>
-void convexHull(vector<Point<T> > const & points, vector<Point<T> > & hull)
+template<class InputIterator, class OutputIterator>
+OutputIterator convexHull(InputIterator pointStart, InputIterator pointEnd, OutputIterator hullStart)
 {
-  typedef Point<T> TPoint;
-  typedef _convexHull_cpoint<T> cpoint; // cached point
+  // orientation:
+  //
+  //    -x <-----> +x
+  //
+  //       +y ^
+  //          |
+  //          |
+  //       -y v
   
-  // hasty but straightforward implementation of graham's convex hull
-  // algorithm given in the notes.
+  typedef _convexHull_cpoint<InputIterator> cpoint;
   
-  int l = points.size();
+  assert(pointEnd - pointStart >= 3); // need at least 3 points
   
-  // find index of rightmost, lowest point
-  int pivoti = 0;
-  for(int i = 1; i < l; ++i)
+  // pivot will be the lowest, rightmost point
+  InputIterator pivot = pointStart;
+  for(InputIterator i = pointStart + 1; i != pointEnd; ++i)
   {
-    if (points[i].x > points[pivoti].x || (points[i].x == points[pivoti].x && points[i].y > points[pivoti].y))
-      pivoti = i;
+    if (i->y < pivot->y || (i->y == pivot->y && i->x > pivot->x))
+      pivot = i;
   }
-  TPoint pivot = points[pivoti];
   
-
-  // find angles about pivot, store them in a vector for quick comparison
-  typedef vector<cpoint> vcpoint;
-  vcpoint cpoints(l);
-
-  // find angles between points
-  for(int i = 0; i < l; ++i)
-  {
-    if (pivot.equals(points[i])) // special case, no angle between overlapping points
-      cpoints[i] = cpoint(points[i],0);
-    else
-    {
-      cpoints[i] = cpoint(points[i],atan2(points[i].y - pivot.y, points[i].x - pivot.x));
-    }  
-  };
-  
-  class lessthan // comparison functor
+  class cpointLessThan
   {
   public:
-    lessthan(Point<T> pivot_) : pivot(pivot_) { } 
-    Point<T> pivot;
     
     operator()(cpoint a, cpoint b)
     {
       if (a.angle != b.angle)
         return a.angle < b.angle;
       else
-        return pivot.distanceTo(a.point) < pivot.distanceTo(b.point);
+        return a.point->distanceTo(*pivot) < a.point->distanceTo(*pivot);
     }
+    
+    cpointLessThan(InputIterator pivot_)
+    : pivot(pivot_) { } 
+    
+    InputIterator pivot;
   };
+
+  vector<cpoint> cpoints; // not really efficient if the function is called repeatedly
+  typedef vector<cpoint>::iterator icpoint;
   
-  sort(cpoints.begin(), cpoints.end(), lessthan(pivot));
+  cpoints.push_back(cpoint(pivot,0));
   
-  hull.resize(0);
-  hull.push_back(cpoints[0].point);
-  hull.push_back(cpoints.back().point);
+  for(InputIterator i = pointStart + 1; i != pointEnd; ++i)
+  {
+    if (!i->equals(*pivot)) // can't find the angle between a point and itself
+    {
+      double a = atan2(i->y - pivot->y, i->x - pivot->x);
+      // sanity check, angle from the pivot must be between 0 and PI since pivot is the lowest point
+      assert(a >= 0 && a <= PI); 
+      cpoints.push_back(cpoint(i,a));
+    }  
+  };
+
+  sort(cpoints.begin() + 1, cpoints.end(), cpointLessThan(pivot));
   
-  int i = 1;
+  OutputIterator hull = hullStart;
+  int i = 0;
+  
+  while(i < 2) // add first two points
+  {
+    *hull = *cpoints[i].point;
+    ++hull; ++i;
+  }
+
+  typedef vector<cpoint>::iterator icpoints;
   while(i < cpoints.size())
   {
-    // top two elements: top and ptop
-    vcpoint::const_iterator top(cpoints.end());
-    --top;
-    vcpoint::const_iterator ptop(top);
-    --ptop;
+    OutputIterator top = hull - 1;
+    OutputIterator ptop = hull - 2;
     
-    if(cpoints[i].point.line_side(ptop->point, top->point) & TPoint::LEFT_SIDE)
+    if(cpoints[i].point->line_rside(*ptop, *top) == Point<int>::LEFT_SIDE)
     {
-      hull.push_back(cpoints[i].point);
-      ++i;
+      *hull = *cpoints[i].point;
+      ++hull; ++i;
     }
     else
-      hull.pop_back();
-  }
+      --hull;
+  };
+  return hull;
 }
 
 #endif

@@ -36,7 +36,7 @@ public:
     Vertex(coord x, coord y, int shapeno_ = NONE)
     : WPoint(x,y), shapeno(shapeno_) { }
     
-    Vertex(WPoint const & wpoint, int shapeno_ = NONE)
+    explicit Vertex(WPoint const & wpoint, int shapeno_ = NONE)
     : WPoint(wpoint), shapeno(shapeno_) { }
     
   };
@@ -63,8 +63,12 @@ public:
     //! array index of nearest actual vertex
     int vertexno;
     GVertex() : Vertex() {}
-    GVertex(Vertex const & vertex, int vertexno_)
+
+    GVertex(Vertex vertex, int vertexno_)
     : Vertex(vertex), vertexno(vertexno_) {}
+
+    GVertex(WPoint const & wpoint, int shapeno, int vertexno_)
+    : Vertex(wpoint,shapeno), vertexno(vertexno_) {}
   };
   
   //! array of grown shapes
