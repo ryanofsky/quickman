@@ -16,6 +16,8 @@
 //  4  X X X X X
 //  5  X X X X X X
 
+#include <valarray>
+using std::min;
 
 template<typename T>
 class SMatrix
@@ -61,7 +63,7 @@ private:
 
 public:
 
-  SMatrix() : dim(NULL), dim(0) { }
+  SMatrix() : data(NULL), dim(0) { }
 
   SMatrix(size_t dim)
   {

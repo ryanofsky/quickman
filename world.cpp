@@ -1,16 +1,16 @@
+#include "world.h"
 
-World::coord World::robot[] = 
-{
-  coord(0,0),
-  coord(370,0),
-  coord(370,550),
-  coord(0,550),
-  coord(185, 275) 
-}
+#include <stdio.h>
+#include <string>
+#include <ctype.h>
+#include <stdlib.h>
+#include <iostream>
 
-void World::read(const char * filename)
-{
-function seek(FILE * fp)
+using std::string;
+using std::cerr;
+using std::endl;
+
+void World::readFile(FILE * fp)
 {
   const size_t BUFFERSIZE = 4096;
   char buffer[BUFFERSIZE];
@@ -18,25 +18,27 @@ function seek(FILE * fp)
   int shapeno = 0;
   int vertexno = 0;
   int shapestart = 0;
-  enum { XCOORD, YCOORD, CRUFT } state;
+  enum { XCOORD, YCOORD, CRUFT };
 
-  state = XCOORD;
+  int state = XCOORD;
   int newlines(0);
+  bool last_line = false;
+  char lastc = 0;
   
   string num = "";
   
-  for(buffer_start = 0;;buffer_start += BUFFERSIZE;)
+  for(size_t buffer_start = 0;;buffer_start += BUFFERSIZE)
   {
-    fseek(fp,buffer_start);
+    fseek(fp, buffer_start, SEEK_SET);
     size_t buffer_size = fread(buffer,sizeof(char), BUFFERSIZE, fp);
 
     for(size_t p = 0; p <= buffer_size; ++p)
     {
       char c = p == buffer_size ? 0 : buffer[p];
       
-      is_whitespace = c <= 32;
-      is_num = isdigit(c);
-      is_line = c == '\n' || c == '\r';
+      bool is_whitespace = c <= 32;
+      bool is_num = isdigit(c);
+      bool is_line = c == '\n' || c == '\r';
       
       if (is_num)
       {
@@ -51,11 +53,11 @@ function seek(FILE * fp)
           {
             ++vertexno;  
             state = XCOORD;
-            vertices[vertexno] = coord(0,0,shapeno);
+            vertices[vertexno] = Vertex(0,0,shapeno);
             if (newlines > 1)
             {
               ++shapeno;
-              shapes[shapeno] = shape(vertexno,0);
+              shapes[shapeno] = Shape(vertexno,0);
             }
           }
          
@@ -77,7 +79,7 @@ function seek(FILE * fp)
         
         if (is_line)
         {
-          if(!last_line || lastc == c))
+          if(!last_line || lastc == c)
             ++newlines; 
           else
             c = lastc;
@@ -86,57 +88,65 @@ function seek(FILE * fp)
       
       lastc = c; last_line = is_line;
     } // for p
-    if (buffersize == 0) break;
+    if (buffer_size == 0) break;
   }
 }
 
-void World::findGrown()
+World::WPoint World::robot[] = 
 {
-  vector<coord> gpoints;
+  WPoint(0,0),
+  WPoint(370,0),
+  WPoint(370,550),
+  WPoint(0,550),
+  WPoint(185, 275) 
+};
+
+void World::makeVisibility()
+{
+  
+  // Step 1: Grow shapes
   
   size_t vertexno = 0;
   
-  vector<coord> points;
-  vector<coord> hull;
+  vector<WPoint> points;
+  vector<WPoint> hull;
   
-  coord rreference = robot[DIM(robot) - 1];
-  
-  for(int shape = 0; shape < shapes.length; ++shape)
+  WPoint rreference = robot[DIM(robot)-1];
+   
+  for(int shape = 0; shape < shapes.size(); ++shape)
   {
     points.resize(0);
     for(int vertex = 0; vertex < shapes[shape].vertices; ++vertex)
     {
-      int vindex shapes[shape].startidx + vertex;
+      int vindex = shapes[shape].startidx + vertex;
       for(int rvertex = 0; rvertex < DIM(robot) - 1; ++rvertex)
         points.push_back(points[vertex] + robot[rvertex] - rreference);
     }
     convexHull(points, hull);
-    typedef vector<coord>::iterator ivcoord;
+    typedef vector<WPoint>::iterator ipoint;
     
-    gshapes[shape] = shape(vertexno,0);
-    for(ivcoord i = hull.begin(); i != hull.end(); ++i)
+    gshapes[shape] = Shape(vertexno,0);
+    for(ipoint i = hull.begin(); i != hull.end(); ++i)
     {
-      gcoordinates[vertexno] = *i;
+      gvertices[vertexno] = GVertex(Vertex(*i),vertexno);
       ++vertexno;
     }
     gshapes[shape].vertices = vertexno - gshapes[shape].startidx;
   }
   
-  enum Visibility { UNKNOWN, VISIBLE, BLOCKED };
-  
-  int gpl = gpoints.length;
-  smatrix<visibility> gvisible(gpl);
-  smatrix<bool> merge(shapes.length());
-  int gintersect
+  int gpl = gvertices.size();
+  SMatrix<bool> merge(shapes.size());
+  SMatrix<bool> gintersect(gvertices.size());
   
   for(int p = 0; p < gpl; ++p)
   for(int q = 0; q < p; ++q)
   {
-    coord & P = gpoints[p];
-    coord & Q = gpoints[q];
+    GVertex & P = gvertices[p];
+    GVertex & Q = gvertices[q];
     if (P.shapeno == Q.shapeno)
     {
-      gintersect(p,q) = (p adjacent to q) ? VISIBLE : BLOCKED;
+      int nv = shapes[P.shapeno].vertices;
+      gintersect(p,q) = (p-q == 1 || p-q == nv-1) ? VISIBLE : BLOCKED;
     }
     else
     {
@@ -144,13 +154,13 @@ void World::findGrown()
       for(int r = 0; p < gpl; ++p)
       for(int s = 0; q < p; ++q)
       {
-        coord & R = gpoints[r];
-        coord & S = gpoints[s];
+        GVertex & R = gvertices[r];
+        GVertex & S = gvertices[s];
         
-        if (intersects(p,q,r,s)) 
+        if (linesIntersect(P,Q,R,S)) 
         {
-          if (p.shapeno == q.shapeno && r.shapeno == s.shapeno)
-            merge(p.shapeno, r.shapeno) = true;
+          if (P.shapeno == Q.shapeno && R.shapeno == S.shapeno)
+            merge(P.shapeno, R.shapeno) = true;
           else
           {
             blocked = true;
@@ -165,88 +175,13 @@ void World::findGrown()
   
   // handle merges...
   
-  
 };
 
-void convexHull(vector<coord> const & points, vector<coord> & hull)
+void World::findPath()
 {
-  const double BADANGLE = -6000.0;
-  int l = points.length;
-  
-  // find rightmost, lowest point
-  int pivot = 0;
-  for(int i = 1; i < l; ++i)
-  {
-    if (point[i].x > point[pivot].x || (point[i].x == point[pivot].x && point[i].y > point[pivot].y))
-      pivot = i;
-  }
-  
-  // find angles about pivot
-  vector<ccoord> ccoords(l);
-  
-  class ccoord // cached coordinate
-  {
-    coord c;
-    double a;
-    ccoord(coord c_, double a_) : c(c_), a(a_) { } 
-  }
-  
-  typedef vector<ccoord> tccoords;
-  tccoords ccoords(l);
-  
-  
-  class csort
-  (
-    coord pivot;
-    csort(coord pivot_) : pivot(pivot_) { } 
-    
-    operator(ccoord a, ccoord b)
-    {
-      if (a.a != b.a)
-        return a.a < b.a;
-      else if (a.a == BADANGLE)
-        return false;
-      else
-        return pivot.distanceTo(a.c) < pivot.distanceTo(b.c);
-    }
-  )
-  
-  for(int i = 0; i < l; ++i)
-  {
-    if (point[i].equals(pivot))
-      ccords[i] = ccoord(point[i],BADANGLE);
-    else
-      ccords[i] = ccoord(point[i], atan2(point[i].y - pivot.y, point[i].x - pivot[x]));
-  }
-  
-  sort(ccoords.begin(), ccoords.end(), csort(points[pivot]));
-  
-  hull.resize(0);
-  hull.push_back(ccoords[0].c);
-  hull.push_back(points.back()->c);
-  
-  int i = 1;
-  while(i < N)
-  {
-    tccoords::const_iterator top(coords.end());
-    --top;
-    tccoords::const_iterator ptop(top);
-    --ptop;
-    
-    vector<ccoord>
-    if (ccoords[i].c.leftOf(*ptop, *top))
-    {
-      hull.push_back(ccoords[i].c);
-      ++i;
-    }
-    else
-      hull.pop_back();
-  }
 }
 
-void intersects(coord s1, coord e1, coord s2, coord e2)
+void main()
 {
-  
+  World w;
 }
-
-
