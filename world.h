@@ -69,10 +69,8 @@ public:
 
 protected:
 
-  enum Visibility { UNKNOWN, VISIBLE, BLOCKED };
-  
   //! visibility graph as an adjacency matrix
-  SMatrix<Visibility> visibility;
+  SMatrix<bool> visibility;
 
 public:
 
