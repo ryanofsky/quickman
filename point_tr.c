@@ -13,10 +13,20 @@
 extern int ct;
 extern Vertex *obstacles[];
 
+void edge_print(EdgeList *e);
+
 Vertex *polygrow(Vertex *old, int diameter);
 
 Point robot_pos;
-Point *vertices;
+/*Point *vertices;*/
+  Point vertices[] = { {4200, 500},
+		       {4600, 1300},
+		       {4600, 2100},
+		       {4300, 3100},
+		       {4300, 3700},
+		       {4500, 4800},
+		       {4600, 5400},
+		       {3700, 6200} };
 IntList *path = 0;
 IntList *current = 0;
 
@@ -230,7 +240,7 @@ void testDijkstra() {
   }
 }
 
-#define CLOSE(x,y) = (abs((x)-(y)) < 0.0001)
+#define CLOSE(x,y) (abs((x)-(y)) < 0.0001)
 
 int intersect(Point p, Point q, Point u, Point v) {
   double den;
@@ -295,7 +305,7 @@ EdgeList **visibility(Point *start, Point *goal, Vertex **grown, int obs,
     u = grown[i];
     do { num++; u = u->next; } while(u != grown[i]);
   }
-  vertices = malloc(num * sizeof(Point));
+/*   vertices = malloc(num * sizeof(Point)); */
   j = 0;
   for(i = 0; i < obs; i++) {
     u = grown[i];
@@ -538,7 +548,7 @@ void avoid_follow(void) {
   }
 }
 
-#define EPS_TH 35
+#define EPS_TH 25
 
 int angle_diff(int th1, int th2) {
   while(th1 < 0) th1 += 360;
@@ -548,13 +558,17 @@ int angle_diff(int th1, int th2) {
   return th1 > th2 ? th1 - th2 : th2 - th1;
 }
 
+
+#define RADIUS 200
+
 void best_avoid(void) {
   Point pos = get_robot_position();
   int side;
   int th; int d;
-  double max; int i, j; float x, y; Point p;
+  double max; int i, j; float x, y; Point p; double metric; double amt;
+  Point ob; float ox, oy; int vel;
 
-  if(sfStalledMotor(sfLEFT) || sfStalledMotor(sfRIGHT) &&
+  if(sfStalledMotor(sfLEFT) && sfStalledMotor(sfRIGHT) &&
      process_state != sfINIT) {
     sfSetPosition(-200);
     process_state = -5;
@@ -581,34 +595,63 @@ void best_avoid(void) {
   th = angle_between(pos, vertices[current->v]) - 90;
   d = distance_between(pos, vertices[current->v]);
 
-  /* look at next corner to adjust heading */
+  vel = 600 * cos(2*(sfRadToDeg(abs(th-sfRobot.ath))));
+  if(vel < 300) vel = 300;
+  sfSetMaxVelocity(vel);
+
+  /* look at next corner to adjust heading, maybe */
   side = angle_between(vertices[last->v], vertices[current->v]) -
     angle_between(vertices[current->v], vertices[current->next->v]);
   if(side < 0) /* left turn */
-    th -= asin(RADIUS/d);
+    amt = -asin(RADIUS/d);
   else if(side > 0) /* right turn */
-    th += asin(RADIUS/d);
+    amt = asin(RADIUS/d);
   /* else do nothing (straight) */
+  else amt = 0;
+  amt *= d < 600 ? (double)d/600 : 1;
+  th += amt;
 
   /* check how close th is to our actual heading */
-  if(abs(sfRobot.ath - th) < EPS_TH) {
-    printf("%d -> ", th);
-    /* use sensors to improve heading */
-    max = 0;
-    for(i = 0; i < CBUF_LEN; i++) {
-      if(!sraw_buf->valid[i]) continue;
-      x = sraw_buf->xbuf[i];
-      y = sraw_buf->ybuf[i];
-      p.x = x + 0.5;
-      p.y = y + 0.5;
-      if(distance_between(pos, p) > max &&
-	 angle_diff(angle_between(pos, p)+90, th) < EPS_TH) {
-	max = distance_between(pos, p);
-	th = angle_between(pos, p)+90;
-      }
-    }
-    printf("%d\n", th);
+/*   if(abs(sfRobot.ath - th) < 1000) { */
+/*     /\* use sensors to improve heading *\/ */
+/*     max = 0; */
+/*     for(i = 0; i < CBUF_LEN; i++) { */
+/*       if(!sraw_buf->valid[i]) continue; */
+/*       x = -sraw_buf->ybuf[i]; */
+/*       y = sraw_buf->xbuf[i]; */
+/*       p.x = x + 0.5 + pos.x; */
+/*       p.y = y + 0.5 + pos.y; */
+/*       metric = distance_between(pos, p); */
+/*       metric = metric > 1000 ? 1000 : metric; */
+/*       metric *= cos(sfDegToRad(2*(angle_between(pos, p)-90-th))); */
+/*       if(metric > max) { */
+/* 	max = metric; */
+/* 	printf("%d %f %f ", th, cos(sfDegToRad(2*(angle_between(pos, p)-90-th))), max); */
+/* 	th = angle_between(pos, p) - 90; */
+/* 	printf("%d\n", th); */
+/*       } */
+/*     } */
+/*   } */
+
+  /* try that again */
+/*   if(sfOccPlane(sfFRONT, sfFRONT, 300, 200, 0) < 1000) { */
+/*     th -= 10; */
+/*     printf("adjusting left\n"); */
+/*   } */
+/*   if(sfOccPlane(sfFRONT, sfFRONT, 300, 0, -200) < 1000) { */
+/*     th += 10; */
+/*     printf("adjusting right\n"); */
+/*   } */
+
+  /* look for unexpected obstacles */
+  if(sfOccPlaneRet(sfFRONT, sfFRONT, 400, 200, -200, &ox, &oy) < 500) {
+    /* a new obstacle found! */
+    ob.x = pos.x - oy;
+    ob.y = pos.y + ox;
+    printf("obstacle %f %f!\n", ob.x, ob.y);
   }
+/*   else */
+/*     printf("%d\n", sfOccPlaneRet(sfFRONT, sfFRONT, 250, 150, -150, ox, oy)); */
 
   sfSetHeading(th);
   sfSetPosition(d);
@@ -628,29 +671,36 @@ void myConnect(void)
   IntDist *d;
   int num, i;
 
+  path = malloc(sizeof(IntList));
+  path->v = 0;
+  path->next = 0;
+  for(i = 1; i < 8; i++)
+    int_append(path, i);
+		       
+  current = path;
+
   sfSetMaxVelocity(600);
 
-  printf("st go\n");
-  read_start("/home/tps12/homework/robotics/hw5/start.txt");
-  read_goal("/home/tps12/homework/robotics/hw5/goal.txt");
-  sg_points(&start, &goal);
+/*   printf("st go\n"); */
+/*   read_start("/home/tps12/homework/robotics/hw5/start.txt"); */
+/*   read_goal("/home/tps12/homework/robotics/hw5/goal.txt"); */
+/*   sg_points(&start, &goal); */
 
-  printf("obs\n");
-  read_obstacles("/home/tps12/homework/robotics/hw5/obstacles.txt");
-  for(i = 0; i < ct; i++)
-    obs[i] = polygrow(obstacles[i], DEFAULT_DIAMETER);
+/*   printf("obs\n"); */
+/*   read_obstacles("/home/tps12/homework/robotics/hw5/obstacles.txt"); */
+/*   for(i = 0; i < ct; i++) */
+/*     obs[i] = polygrow(obstacles[i], DEFAULT_DIAMETER); */
 
-  printf("visi\n");
-  vis = visibility(&start, &goal, obs, ct, &num);
-  printf("dijk\n");
-  d = dijkstra(vis, num, num-2);
-  printf("path\n");
-  path = d_to_path(d, num-1);
-  printf("plots\n");
-  make_plots(&start, &goal, vertices, obs, ct, vis, num, path);
-  exit(0);
+/*   printf("visi\n"); */
+/*   vis = visibility(&start, &goal, obs, ct, &num); */
+/*   printf("dijk\n"); */
+/*   d = dijkstra(vis, num, num-2); */
+/*   printf("path\n"); */
+/*   path = d_to_path(d, num-1); */
+/*   printf("plots\n"); */
+/*   make_plots(&start, &goal, vertices, obs, ct, vis, num, path); */
 
-  sfInitProcess(follow_points, "avoid_follow");
+  sfInitProcess(best_avoid, "avoid_follow");
 }
 
 #ifdef IS_UNIX
