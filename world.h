@@ -90,10 +90,21 @@ public:
 protected:
 
   static WPoint robot[];
+
+
+  bool noIntersect
+  (
+    vector<Shape> & sbefore, vector<GVertex> & vbefore,
+    vector<Shape> & safter, vector<GVertex> & vafter
+  );
   
 public:
 
   void describe();
+  
+  template<class InputIterator>
+  void outputShapes(FILE * fp, InputIterator istart, InputIterator iend);
+  
 };
 
 #endif

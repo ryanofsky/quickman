@@ -178,11 +178,42 @@ void World::growShapes()
     }
   }
   
-  // now look for overlapping shapes, if two shapes overlap, they need to be merged
+  
+  vector<Shape> *s1(&nshapes), *s2(&gshapes);
+  vector<GVertex> *v1(&nvertices), *v2(&gvertices);  
+  
+  while(noIntersect(*s1, *v1, *s2, *v2))
+  {
+    cerr << "once" << endl;
+    swap(s1,s2);
+    swap(v1,v2);
+  };
+  
+  gshapes = *s1;
+  gvertices = *v1;
+  
+};
+
+
+bool World::noIntersect
+(
+  vector<Shape> & sbefore, vector<GVertex> & vbefore,
+  vector<Shape> & safter, vector<GVertex> & vafter
+)
+{
+  
+  typedef vector<Shape>::iterator ishape;
+  typedef vector<WPoint>::iterator ipoint;
+  typedef vector<GVertex>::iterator ivertex;
+  typedef vector<GVertex>::iterator igvertex;
+  
+  bool mergeany = false;  
+
+  // look for overlapping shapes, if two shapes overlap, they need to be merged
   
   // store the new vertex counts in an array
   vector<int> vertexCount;
-  for(ishape shape1 = nshapes.begin(); shape1 != nshapes.end(); ++shape1) // for each shape, shape1
+  for(ishape shape1 = sbefore.begin(); shape1 != sbefore.end(); ++shape1) // for each shape, shape1
   {
     int sv1 = shape1->startidx; // start vertex
     int nv1 = shape1->vertices; // number of vertices
@@ -190,7 +221,7 @@ void World::growShapes()
 
     vertexCount.push_back(nv1);
     
-    for(ishape shape2 = nshapes.begin(); shape2 != shape1; ++shape2) // for each earlier shape, shape2
+    for(ishape shape2 = sbefore.begin(); shape2 != shape1; ++shape2) // for each earlier shape, shape2
     {
       int sv2 = shape2->startidx; // start vertex
       int nv2 = shape2->vertices; // number of vertices
@@ -198,24 +229,25 @@ void World::growShapes()
       
       for(int e1 = sv1; e1 < ev1; ++e1) // for each edge of shape1
       {
-        GVertex & P = nvertices[e1];
-        GVertex & Q = nvertices[(e1-sv1+1)%nv1 + sv1];
+        GVertex & P = vbefore[e1];
+        GVertex & Q = vbefore[(e1-sv1+1)%nv1 + sv1];
 
         for(int e2 = sv2; e2 < ev2; ++e2) // for each edge of shape2
         {
-          GVertex & R = nvertices[e2];
-          GVertex & S = nvertices[(e2-sv2+1)%nv2 + sv2];
+          GVertex & R = vbefore[e2];
+          GVertex & S = vbefore[(e2-sv2+1)%nv2 + sv2];
           
           if (linesIntersect(P,Q,R,S)) // if edges for these shapes intersect
           {
+            mergeany = true;
             int latershape = P.shapeno;
             int earliershape = R.shapeno;
             // subsume the earlier shape into the later one
             vertexCount[latershape] += vertexCount[earliershape];
             vertexCount[earliershape] = 0;
             for(int v = 0; v < sv1; ++v) // subsume all vertexes which are part of this shape
-              if(nvertices[v].shapeno == earliershape)
-                nvertices[v].shapeno = latershape;
+              if(vbefore[v].shapeno == earliershape)
+                vbefore[v].shapeno = latershape;
             goto intersection_found;
           }
         }        
@@ -224,6 +256,8 @@ void World::growShapes()
       continue; // examine the next shape2
     } // for shape2
   } // for shape1
+  
+  if (!mergeany) return false;
   
   class lessthan // comparison functor
   {
@@ -235,21 +269,21 @@ void World::growShapes()
   };
 
   // sort vertices by shape number. ordering of vertices within each shape is preserved
-  stable_sort(nvertices.begin(),nvertices.end(),lessthan());
+  stable_sort(vbefore.begin(),vbefore.end(),lessthan());
 
   // clear out the existing grown shape data
-  gshapes.resize(0);
-  gvertices.resize(0);
+  safter.resize(0);
+  vafter.resize(0);
   
   // temporary place to store merged hulls
   vector<GVertex> ghull;
   
-  int lastshape = nvertices.front().shapeno;
+  int lastshape = vbefore.front().shapeno;
   int shape = 0;
-  igvertex lastv = nvertices.begin();
-  for(igvertex v = nvertices.begin(); ; ++v) // for each vertex
+  igvertex lastv = vbefore.begin();
+  for(igvertex v = vbefore.begin(); ; ++v) // for each vertex
   {
-    bool done = v == nvertices.end();
+    bool done = v == vbefore.end();
     
     if (done || v->shapeno != lastshape) // new shape
     {
@@ -257,13 +291,13 @@ void World::growShapes()
 
       igvertex gvstart, gvend;
       
-      if (vertexCount[lastshape] > nshapes[lastshape].vertices) // shape is merged
+      if (vertexCount[lastshape] > sbefore[lastshape].vertices) // shape is merged
       {
         ghull.resize(v - lastv);
         gvstart = ghull.begin();
         gvend = convexHull(lastv, v, gvstart);
       }
-      else if(vertexCount[lastshape] == nshapes[lastshape].vertices) // shape is unchanged
+      else if(vertexCount[lastshape] == sbefore[lastshape].vertices) // shape is unchanged
       {
         gvstart = lastv;
         gvend = v;
@@ -274,11 +308,11 @@ void World::growShapes()
       }
 
       // add the shape and copy the vertices (from either a hull or the existing vertex array)
-      gshapes.push_back(Shape(vertexno,gvend - gvstart));
+      safter.push_back(Shape(vafter.size(),gvend - gvstart));
       for(igvertex i = gvstart; i != gvend; ++i)
       {
-        gvertices.push_back(*i);
-        gvertices.back().shapeno = shape;
+        vafter.push_back(*i);
+        vafter.back().shapeno = shape;
       }
       
       ++shape;
@@ -289,9 +323,9 @@ void World::growShapes()
     
     lastshape = v->shapeno;
   }
-};
+  return true;
+}
 
-  
 void World::makeVisibility()
 {
   typedef vector<Shape>::iterator ishape;
@@ -340,6 +374,33 @@ void World::findPath()
 {
 }
 
+template<class InputIterator>
+void World::outputShapes(FILE * fp, InputIterator istart, InputIterator iend)
+{
+  if (istart == iend) return;
+  
+  int lastshape = istart->shapeno;
+  InputIterator firsti = istart;
+  
+  cerr << "i\tx\ty\tshapeno" << endl;
+  for(InputIterator i = istart;; ++i)
+  {
+    bool over = i == iend;
+    
+    if (over || lastshape != i->shapeno)
+    {
+      fprintf(fp, "%i %i\n\n",firsti->x,firsti->y);
+      firsti = i;
+    }
+   
+    if (over) break;
+    
+    fprintf(fp, "%i %i\n",i->x,i->y);
+    
+    lastshape = i->shapeno;
+  }
+}
+
 void World::describe()
 {
   typedef vector<Shape>::const_iterator ishape;
@@ -386,6 +447,14 @@ void main()
   FILE * fp = fopen("M:/russ/My Documents/quickman/obstacle.txt","r");
   w.readFile(fp);
   fclose(fp);
+
   w.growShapes();
   w.describe();
+  
+  fp = fopen("M:/russ/My Documents/quickman/rgrow.txt","w");
+  w.outputShapes(fp, w.vertices.begin(), w.vertices.end());
+  w.outputShapes(fp, w.gvertices.begin(), w.gvertices.end());
+  fclose(fp);
+  
+  
 }
