@@ -5,6 +5,8 @@
 #include <errno.h>
 extern int errno;
 
+#define EPSILON 0.0001 /* like zero */
+
 Vertex * obstacles[MAX_POLY];
 Vertex * grown[MAX_POLY];
 Point starts[MAX_POINTS];
@@ -14,115 +16,31 @@ int ct=0; /* global count of actually created obstacles */
 int start_ct=0;
 int goal_ct=0;
 
-void read_start(char *startfilename) {
-  double x, y;
-  char buffer[128];
-  char *bufp= &(buffer[0]);
-  FILE *fp=fopen(startfilename, "r");
-  if (fp==NULL) {
-    printf("Could not open %s for reading\n", startfilename);
-    exit(1);
-  }
 
-  while(fgets(bufp, 128, fp)) {
-    if (buffer[0]=='\n')
-      break;
-    if (start_ct==MAX_POINTS) {
-      printf("Read too many start points. Bye.\n");
-      exit(1);
-    }
-    sscanf(bufp, "%lg %lg", &x, &y);
-    starts[start_ct].x = x;
-    starts[start_ct].y = y;
-    start_ct++;
+/* assumes decent doubly-linked list as input */
+Vertex * free_polygon(Vertex *p) {
+  Vertex *q=NULL;
+  if (!p) {
+    printf("Null pointer passed to free_polygon.  Fine!\n");
+    return NULL;
   }
-  fclose(fp);
+  q=p->next;
+  /* 20mg of paranoid */
+  if (q==NULL) {
+    printf("There is something fundamentally wrong with that vertex list.\n");
+    return NULL;
+  }
+  if (p==q) {
+    printf("Self-referential head vertex.\n");
+    return NULL;
+  }
+  while (q!=p) {
+    /* hello world.    printf("%p\t%p\t%p\n", p, q->next, q); */
+    free(q->prev);
+    q=q->next;
+  }
+  return NULL;
 }
-
-void read_goal(char *goalfilename) {
-  double x, y;
-  char buffer[128];
-  char *bufp= &(buffer[0]);
-  FILE *fp=fopen(goalfilename, "r");
-  if (fp==NULL) {
-    printf("Could not open %s for reading\n", goalfilename);
-    exit(1);
-  }
-
-  while(fgets(bufp, 128, fp)) {
-    if (buffer[0]=='\n')
-      break;
-    if (goal_ct==MAX_POINTS) {
-      printf("Read too many goal points. Bye.\n");
-      exit(1);
-    }
-    sscanf(bufp, "%lg %lg", &x, &y);
-    goals[start_ct].x = x;
-    goals[start_ct].y = y;
-    goal_ct++;
-  }
-  fclose(fp);
-}
-
-
-void read_obstacles(char *obsfilename) {
-  int flag=0; /* ugly hack */
-  double x, y;
-  FILE *fp;
-  char buffer[128];
-  char *bufp= &(buffer[0]);
-  char *err;
-  Vertex *h=NULL;
-  Vertex *p;
-  Vertex **q= &(obstacles[0]);
-  fp = fopen(obsfilename, "r");
-  if (fp==NULL) {
-    printf("Could not open %s for reading\n", obsfilename);
-    exit(1);
-  }
-  while( (err = fgets(bufp, 128, fp)) ) {
-    if ((*err) == '\n') {
-      if (!flag) {
-	/*
-	 * printf("read newline == we are done with a polygon.\n");
-	 */
-	/* we do not need the last vertex to be the same! */
-	/* so we get rid of current. */
-	ct++;
-	if (ct==MAX_POLY) {
-	  printf("Read too many polygons.  Bye.\n");
-	  exit(1);
-	}
-	p=p->prev->prev;
-	free(p->next);
-	p->next=h;
-	h->prev=p;
-	*q = h;
-	q= &(obstacles[ct]); /* a bit inefficient, but safe! */
-	h=NULL;
-      }
-      flag = 1;
-    } else {
-      sscanf(bufp, "%lg %lg", &x, &y);
-      /* printf("x is %g, y is %g\n", x, y); */
-      if (h==NULL) {
-	h=(Vertex *)malloc(sizeof(Vertex));
-	p=h;
-      } 
-      p->pt.x = x;
-      p->pt.y = y;
-      p->next = (Vertex *)malloc(sizeof(Vertex));
-      p->next->prev = p;
-      p = p->next;
-      flag = 0;
-    }
-  }
-
-  /*  printf("Closing obstacles file\n"); */
-  fclose(fp);
-  /*  printf("Read %d polygons.\n", ct); */
-}
-
 
 /* let C = A - B */
 int subtract_vector(Point A, Point B, Point *C) {
@@ -178,6 +96,229 @@ double norm(Point A) {
 double distance_squared(Point p1, Point p2) {
   return 
     (p2.y - p1.y)*(p2.y - p1.y) + (p2.x - p1.x)*(p2.x - p1.x);
+}
+
+/* given a polygon, based on the angle
+   (h->prev, h, h->next)
+   remove vertices for which the angle has measure 180 degrees
+   reverse the order of vertices if wrong orientation.
+   return the new head, in case we removed the original.
+   exit with error message if not-a-polygon or concave
+*/
+Vertex * orient(Vertex *h) {
+  /* will exit with error if less than 3 vertices */
+  Point u, v;
+  Vertex *t; /* as in traversor */
+  Vertex *s; /* as in spare */
+  int weird=0; /* oriented weirdly: reverse later */
+  int nonweird=0; /* oriented normally */
+  int justmovedhead; /* essential for loop control */
+  double z;
+  if (!h) {
+    printf("Huge error: head vertex==NULL\n");
+    exit(1);
+  }
+  t=h;
+  do {
+    justmovedhead=0;
+    if ((subtract_vertex(t->next, t, &u)) ||
+	(subtract_vertex(t->prev, t, &v)) ||
+	((u.x == v.x) && (u.y == v.y))) {
+      printf("Polygon has less than 3 real edges.  \
+Set to NULL.\n");
+      t=free_polygon(t);
+      return NULL;
+    }
+    /* check z component of (u x v) to see orientation.
+       nonnegative is what we want. */
+    z = u.x * v.y - v.x * u.y;
+    /* printf("z is %g\n", z); */
+    if ((z<EPSILON) && (z>-EPSILON)) {
+      /* take out this vertex.  t will take
+       * the value of the next vertex. */
+      if (h==t) {
+	/* we don't want to lose our head, do we? */
+	h=t->next;
+	justmovedhead=1;
+      }
+      printf("Taking out vertex (%g, %g)\n", t->pt.x, t->pt.y);
+      t=t->next;
+      /* hack.  just so we do not have to use a new pointer. */
+      t->prev=t->prev->prev;
+      free(t->prev->next);
+      t->prev->next=t;
+    } else {
+      if (z>0) {
+	nonweird++;
+      } else /* if (z<0) */ {
+	weird++;
+      }
+      t=t->next;
+    }
+  } while ((t!=h) || justmovedhead);
+  
+  printf("weird==%d, nonweird==%d\t", weird, nonweird);
+  
+  if (weird && nonweird) {
+    printf("Polygon is concave.  Set to NULL.\n");
+    t=free_polygon(t);
+    return NULL;
+  }
+  printf("Verified convexity.");
+
+  if (weird) {
+    /* Need to reverse the order of the polygon */
+    /* ...because Deniz could not figure out in finite time
+       a good way to both check and fix orientation in one pass.  
+       the greatest caveat was the act of removing a vertex,
+       what if the vertex to be removed is the one before
+       the last, etc.  Also, it is probably more efficient 
+       this way since by default, we are not expecting
+       polygons to be weird. */
+    /* just swap the prev and next pointers. */
+    do {
+      /* traverse backwards for fun */
+      s=t->prev;
+      t->prev=t->next;
+      t->next=s;
+      t=s;
+    } while (t!=h);
+    printf("  Reoriented the polygon.");
+  }
+  printf("\n");
+  return h;
+}
+
+
+void read_start(char *startfilename) {
+  double x, y;
+  char buffer[128];
+  char *err;
+  char *bufp= &(buffer[0]);
+  FILE *fp=fopen(startfilename, "r");
+  if (fp==NULL) {
+    printf("Could not open %s for reading\n", startfilename);
+    exit(1);
+  }
+
+  while( (err=fgets(bufp, 128, fp)) ) {
+    if (buffer[0] == '#')
+      continue; /* skip comments.  pretty cool, heh? */
+    if ((*err)=='\n')
+      break;
+    if (start_ct==MAX_POINTS) {
+      printf("Read too many start points. Bye.\n");
+      exit(1);
+    }
+    sscanf(bufp, "%lg %lg", &x, &y);
+    starts[start_ct].x = x;
+    starts[start_ct].y = y;
+    start_ct++;
+  }
+  fclose(fp);
+}
+
+void read_goal(char *goalfilename) {
+  double x, y;
+  char buffer[128];
+  char *bufp= &(buffer[0]);
+  FILE *fp=fopen(goalfilename, "r");
+  char *err;
+  if (fp==NULL) {
+    printf("Could not open %s for reading\n", goalfilename);
+    exit(1);
+  }
+
+  while( (err=fgets(bufp, 128, fp)) ) {
+    if (buffer[0] == '#')
+      continue; /* skip comments */
+    if ((*err)=='\n')
+      break;
+    if (goal_ct==MAX_POINTS) {
+      printf("Read too many goal points. Bye.\n");
+      exit(1);
+    }
+    sscanf(bufp, "%lg %lg", &x, &y);
+    goals[start_ct].x = x;
+    goals[start_ct].y = y;
+    goal_ct++;
+  }
+  fclose(fp);
+}
+
+
+/* read obstacles from file. */
+void read_obstacles(char *obsfilename) {
+  int flag=0; /* ugly hack */
+  double x, y;
+  FILE *fp;
+  char buffer[128];
+  char *bufp= &(buffer[0]);
+  char *err;
+  Vertex *h=NULL;
+  Vertex *p;
+  Vertex **q= &(obstacles[0]);
+  fp = fopen(obsfilename, "r");
+  if (fp==NULL) {
+    printf("Could not open %s for reading\n", obsfilename);
+    exit(1);
+  }
+  while( (err = fgets(bufp, 128, fp)) ) {
+    if (buffer[0] == '#') {
+      continue; /* skip comments, but not whitespace */
+    }
+    if ((*err == '\n') || (buffer[0] == '\n') || (buffer[0]== ' ')
+	|| feof(fp)) {
+      if (!flag) {
+	/*
+	 * printf("read newline == we are done with a polygon.\n");
+	 */
+
+	/* we do not need the last vertex to be the same! */
+	/* so we get rid of current. */
+	ct++;
+	if (ct==MAX_POLY) {
+	  printf("Read too many polygons.  Bye.\n");
+	  exit(1);
+	}
+	/* reminder: we are at a new node with no coords read */
+	p=p->prev;
+	free(p->next);
+	/* in the test files, it is the case that the
+	   first vertex is the same as the last.  
+	   wrong, wrong, wrong... */
+	if ((p->pt.x == h->pt.x) &&
+	    (p->pt.y == h->pt.y)) {
+	  p=p->prev;
+	  free(p->next);
+	}
+	p->next=h;
+	h->prev=p;
+	// *q=h;
+	*q = orient(h); /* two birds in one line, kind of */
+	q= &(obstacles[ct]); /* a bit inefficient, but safe! */
+	h=NULL;
+      }
+      flag = 1;
+    } else {
+      sscanf(bufp, "%lg %lg", &x, &y);
+      /* printf("x is %g, y is %g\n", x, y); */
+      if (h==NULL) {
+	h=(Vertex *)malloc(sizeof(Vertex));
+	p=h;
+      } 
+      p->pt.x = x;
+      p->pt.y = y;
+      p->next = (Vertex *)malloc(sizeof(Vertex));
+      p->next->prev = p;
+      p = p->next;
+      flag = 0;
+    }
+  }
+
+  /*  printf("Closing obstacles file\n"); */
+  fclose(fp);
+  /*  printf("Read %d polygons.\n", ct); */
 }
 
 
@@ -259,7 +400,8 @@ Vertex * polygrow(Vertex * h, double amount) {
       k = (E.x + j * mCA.x - D.x)/mAB.x;
     } else {
       /* oh well.  so much for not checking. */
-      printf("big bug: two adjacent vertices coincide!\n");
+      printf("big bug: two adjacent vertices coincide! (%g, %g)\n",
+	     p->pt.x, p->pt.y);
       exit(1);
     }
     
@@ -289,14 +431,16 @@ Vertex * polygrow(Vertex * h, double amount) {
 
 
 void print_poly(Vertex *h) {
-
   Vertex *p=h;
+  if (!h) {
+    printf("NULL pointer passed to print_poly.\n\n");
+    return;
+  }
   do {
     printf("%g\t%g\n", p->pt.x, p->pt.y);
     p=p->next;
   } while (p!=h);
   printf("\n");
-
 }
 
 
@@ -345,17 +489,17 @@ int main(int argc, char *argv[]) {
     }
   } else diameter = DEFAULT_DIAMETER;
 
-  read_obstacles("obstacles.txt");
-
+  //  read_obstacles("obstacles.txt");
+  read_obstacles("bad_obstacles.txt");
   for(i=0; i<ct; i++) {
-    /*    printf("Input %d was:\n", i);
-	  print_poly(obstacles[i]);
-    */
+    printf("Input %d was:\n", i);
+    print_poly(obstacles[i]);
+    
     grown[i]=polygrow(obstacles[i], diameter);
   }
 
   for(i=0; i<ct; i++) {
-    /*  printf("Obstacle %d now is:\n", i); */
+    printf("Obstacle %d now is:\n", i);
     print_poly(grown[i]);
   }
 
@@ -366,4 +510,15 @@ int main(int argc, char *argv[]) {
   return 0;
 
 }
+
+
+
+
+
+
+
+
+
+
+
 
