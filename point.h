@@ -38,7 +38,10 @@ struct Point
   Point<T> inline operator-(Point<T> c) const;   
   
   //! Point has the same coordinates as c
-  bool inline equals(Point<T> const & c) const;
+  bool inline equals(Point<T> c) const
+  {
+    return x == c.x && y == c.y;  
+  }
 };
 
 //! Line segments connecting P1 Q1 and P2 Q2 intersect

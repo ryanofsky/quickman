@@ -86,6 +86,10 @@ public:
 protected:
 
   static WPoint robot[];
+  
+public:
+
+  void describe();
 };
 
 #endif

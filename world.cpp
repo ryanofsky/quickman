@@ -16,81 +16,92 @@ using std::copy;
 
 void World::readFile(FILE * fp)
 {
-  const size_t BUFFERSIZE = 4096;
-  char buffer[BUFFERSIZE];
+  // clear out existing data
+  shapes.resize(0);
+  vertices.resize(0);
 
+
+  // state variables
   int shapeno = 0;
   int vertexno = 0;
-  int shapestart = 0;
-  enum { XCOORD, YCOORD, CRUFT };
+  int lastvertexno = 0;
+  Vertex vertex(0,0,shapeno);
 
+  enum { XCOORD, YCOORD, CRUFT };
   int state = XCOORD;
+
   int newlines(0);
-  bool last_line = false;
-  char lastc = 0;
-  
+  int lineno = 1;
   string num = "";
-  
-  for(size_t buffer_start = 0;;buffer_start += BUFFERSIZE)
+
+  const size_t BUFFERSIZE = 4096;
+  size_t buffer_size;
+  char buffer[BUFFERSIZE];
+  for(;;)
   {
-    fseek(fp, buffer_start, SEEK_SET);
-    size_t buffer_size = fread(buffer,sizeof(char), BUFFERSIZE, fp);
+    buffer_size = fread(buffer,sizeof(char), BUFFERSIZE, fp);
 
     for(size_t p = 0; p <= buffer_size; ++p)
     {
-      char c = p == buffer_size ? 0 : buffer[p];
-      
-      bool is_whitespace = c <= 32;
-      bool is_num = isdigit(c);
-      bool is_line = c == '\n' || c == '\r';
-      
-      if (is_num)
+      char c;
+
+      if (buffer_size == 0)
       {
-        num += c;
-        newlines = 0;
+        newlines = 2;
+        c = 0;
       }
       else
+        c = buffer[p];
+      
+      bool is_whitespace = c <= 32;
+      bool is_num = isdigit(c) || c == '-';
+      bool is_line = c == '\n';
+      
+      if (is_num)
+        num += c;
+      else
       {
-        if (num.length() > 0) // new field found
+        if (num.length() > 0 || buffer_size == 0) // new field found
         {
           if (newlines > 0)
           {
-            ++vertexno;  
-            state = XCOORD;
-            vertices[vertexno] = Vertex(0,0,shapeno);
-            if (newlines > 1)
-            {
-              ++shapeno;
-              shapes[shapeno] = Shape(vertexno,0);
-            }
+            if (vertexno != 0 || state == CRUFT) // ignore leading newlines
+            {  
+              if (state < CRUFT)
+                cerr << "Parse error on line " << lineno << ". Vertex " << vertexno << " has invalid x or y coordinates" << endl;
+              state = XCOORD;
+
+              // if the last vertex is the same as the first one, don't add it
+              if (newlines <= 1 || !vertex.equals(vertices[lastvertexno]))
+              {
+                vertices.push_back(vertex);
+                ++vertexno;
+              }
+
+              if (newlines > 1)
+              {
+                shapes.push_back(Shape(lastvertexno,vertexno - lastvertexno));
+                ++shapeno;
+                vertex.shapeno = shapeno;
+                lastvertexno = vertexno;
+              }
+            }  
+            newlines = 0;
           }
          
-          int i = atoi(num.c_str());
-          
           if (state == XCOORD)
-            vertices[vertexno].x = i;
+            vertex.x = atoi(num.c_str());
           else if (state == YCOORD)
-          {
-            vertices[vertexno].y = i;
-            ++shapes[shapeno].vertices;
-          }
+            vertex.y = atoi(num.c_str());
           else
-            cerr << "Cruft '" << num << "' found." << endl;
+            cerr << "Cruft '" << num << "' found on line " << lineno << "." << endl;
           
           if (state < CRUFT) ++state;
           num = "";
         } // num.length() > 0
         
-        if (is_line)
-        {
-          if(!last_line || lastc == c)
-            ++newlines; 
-          else
-            c = lastc;
-        }
+        if (is_line) { ++newlines; ++lineno; }
       }
-      
-      lastc = c; last_line = is_line;
     } // for p
     if (buffer_size == 0) break;
   }
@@ -306,7 +317,33 @@ void World::findPath()
 {
 }
 
+void World::describe()
+{
+  typedef vector<Shape>::const_iterator ishape;
+  typedef vector<Vertex>::const_iterator ivertex;
+
+  cerr << "Printing shapes table" << endl;
+  cerr << "i\tstart\tvertices\t" << endl;
+  for(ishape shape = shapes.begin(); shape != shapes.end(); ++shape)
+  {
+    cerr << (shape - shapes.begin()) << '\t' << shape->startidx << '\t'
+         << shape->vertices << endl;
+  }
+  
+  cerr << "Printing vertex table" << endl;
+  cerr << "i\tx\ty\tshapeno" << endl;
+  for(ivertex vertex = vertices.begin(); vertex != vertices.end(); ++vertex)
+  {
+    cerr << (vertex - vertices.begin()) << '\t' << vertex->x << '\t'
+         << vertex->y << '\t' << vertex->shapeno << endl;
+  }
+}
+
 void main()
 {
   World w;
+  FILE * fp = fopen("M:/russ/My Documents/quickman/obstacle.txt","r");
+  w.readFile(fp);
+  fclose(fp);
+  w.describe();
 }

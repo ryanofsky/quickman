@@ -12,11 +12,13 @@ Point<T> Point<T>::operator-(Point<T> c) const
   return Point(x - c.x, y - c.y);
 }
 
+/*
 template<typename T>
-bool Point<T>::equals(Point<T> const & c) const
+bool Point<T>::equals(Point<T> c) const
 {
   return x == c.x && y == c.y;
 }
+*/
 
 template<typename T>
 double Point<T>::distanceTo(Point c) const
