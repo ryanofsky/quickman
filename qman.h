@@ -1,3 +1,8 @@
+#ifndef qman_h
+#define qman_h
+
+#include "point.h"
+
 /* qman.h */
 /* data structures and stuff */
 
@@ -9,11 +14,6 @@
 #define DEFAULT_DIAMETER 662.87253676706202790366913417296
 /* calculated from "370 x 550  mm." */
 
-
-typedef struct p {
-  double x;
-  double y;
-} Point;
 
 typedef struct il {
   int v;
@@ -32,7 +32,7 @@ typedef struct el {
 } EdgeList;
 
 typedef struct vert {
-  Point pt;
+  Point<double> pt;
   struct vert *next;
   struct vert *prev;
 } Vertex;
@@ -40,5 +40,4 @@ typedef struct vert {
 /* each polygon is represented as a doubly-linked circular
  * list of Vertices */
 
-
-
+#endif

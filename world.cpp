@@ -586,7 +586,7 @@ void World::describe()
          << endl;
   }  
 }
-
+/*
 void main()
 {
   World w;
@@ -613,3 +613,4 @@ void main()
   w.outputShapes(fp, w.gvertices.begin(), w.gvertices.end());
   fclose(fp);
 }
+*/

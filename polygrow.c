@@ -124,8 +124,7 @@ Vertex * orient(Vertex *h) {
     if ((subtract_vertex(t->next, t, &u)) ||
 	(subtract_vertex(t->prev, t, &v)) ||
 	((u.x == v.x) && (u.y == v.y))) {
-      printf("Polygon has less than 3 real edges.  \
-Set to NULL.\n");
+      printf("Polygon has less than 3 real edges.  Set to NULL.\n");
       t=free_polygon(t);
       return NULL;
     }
