@@ -92,7 +92,7 @@ public:
 
 private:
   SMatrix(SMatrix const &) { }
-  operator=(SMatrix const &) { }
+  SMatrix & operator=(SMatrix const &) { return *this; }
 };
 
 #endif

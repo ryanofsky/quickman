@@ -97,7 +97,6 @@ void World::growShapes()
   
   while(noIntersect(*s1, *v1, *s2, *v2))
   {
-    cerr << "once" << endl;
     swap(s1,s2);
     swap(v1,v2);
   };
@@ -113,13 +112,22 @@ void World::growShapes()
 };
 
 
+class _World_noIntersect_lessthan // comparison functor, can't be declared locally with G++
+{
+public:
+  bool operator()(World::GVertex a, World::GVertex b)
+  {
+    return a.shapeno < b.shapeno;
+  }
+};
+
 bool World::noIntersect
 (
   vector<Shape> & sbefore, vector<GVertex> & vbefore,
   vector<Shape> & safter, vector<GVertex> & vafter
 )
 {
-  
+  typedef _World_noIntersect_lessthan lessthan;
   typedef vector<Shape>::iterator ishape;
   typedef vector<WPoint>::iterator ipoint;
   typedef vector<GVertex>::iterator ivertex;
@@ -177,20 +185,13 @@ bool World::noIntersect
   
   if (!mergeany) return false;
   
-  class lessthan // comparison functor
-  {
-  public:
-    operator()(GVertex a, GVertex b)
-    {
-      return a.shapeno < b.shapeno;
-    }
-  };
-
   // sort vertices by shape number. ordering of vertices within each shape is preserved
   stable_sort(vbefore.begin(),vbefore.end(),lessthan());
 
   // clear out the existing grown shape data
+  safter.resize(100);
   safter.resize(0);
+  vafter.resize(100);
   vafter.resize(0);
   
   // temporary place to store merged hulls
@@ -264,6 +265,8 @@ World::GVertex & World::get_node(int i)
 
 void World::makeVisibility()
 {
+  cout << "1" << endl;
+  
   typedef vector<WPoint>::iterator ipoint;
   typedef vector<GVertex>::iterator ivertex;
   typedef vector<Shape>::iterator ishape;
@@ -316,16 +319,16 @@ void World::makeVisibility()
     }
     if (!reject)
     {
-      if (nodes.size() == 28)
-      {
-        cerr << "wow";
-      }
-      int wsd = v - gvertices.begin();
-      nodes.push_back(wsd);
+      nodes.push_back(v - gvertices.begin());
     }
   }  
   nodes.push_back(GOAL);
   
+  cerr << "before 2" << endl;
+  describe();
+  cerr << "after 2" << endl;
+  
+  cout << "2" << endl;
 
   int gpl = nodes.size();
  
@@ -335,20 +338,36 @@ void World::makeVisibility()
   for(int p = 0; p < gpl; ++p) // try each potential visiblity graph edge
   for(int q = 0; q < p; ++q)
   {
-    if (p == 29)
-    {
-      cerr << "ehllsd";
-    }
+    cout << "p = " << p << " q = " << q << endl;
+    bool broken = (p >=56);
     
     GVertex & P = get_node(p);
     GVertex & Q = get_node(q);
+    
+if (broken)
+{
+   cout << "nodes[p] = " << nodes[p] << " nodes[q] = " << nodes[q] << endl;
+}
+    
     if (P.shapeno == Q.shapeno && P.shapeno >= 0)
     {
       int nv = gshapes[P.shapeno].vertices;
       isvisible(p,q) = (p - q== 1 || p - q == gshapes[P.shapeno].vertices - 1);
+if (broken)
+{
+   cout << "A" << endl;
+}
+
+
     }
     else
     {
+
+if (broken)
+{
+   cout << "B" << endl;
+}
+
       bool visible = true;
       // 
       for(ishape shape = gshapes.begin(); shape != gshapes.end(); ++shape) 
@@ -356,6 +375,12 @@ void World::makeVisibility()
         int sv = shape->startidx;   // start vertex
         int nv = shape->vertices;    // number of vertices
         int ev = sv + nv;
+
+if (broken)
+{
+   if (sv == 68) describe();
+   cout << " sv = " << sv <<  " nv = " << nv <<  " ev = " << ev << endl;
+}
 
         for(int e = sv; e < ev; ++e) // for each edge of shape
         {
@@ -369,11 +394,28 @@ void World::makeVisibility()
           }
         }        
       }
+
+if (broken)
+{
+   cout << "C" << endl;
+}
+
       notvisible:
       isvisible(p,q) = visible;
+
+if (broken)
+{
+   cout << "D" << endl;
+}
       
       if (visible)
         distanceCache(p,q) = P.distanceTo(Q);
+
+if (broken)
+{
+   cout << "E" << endl;
+}
+        
     }
   }
 }  
@@ -387,11 +429,28 @@ struct _World_findPath_IntDist // metrowerks won't allow this to be instantiated
   _World_findPath_IntDist() : i(-1), d(100000) {}
 };
 
+
+// heap comparison functor, can't be declared locally with g++
+class _World_findPath_pcompare
+{
+public:
+  typedef _World_findPath_IntDist IntDist;
+  vector<IntDist> & d;
+  _World_findPath_pcompare(vector<IntDist> & d_) : d(d_) { }
+  bool operator()(int a, int b)
+  {
+    return d[a].d > d[b].d; // priority_queue puts max first
+  }
+};
+
+
 void World::findPath()
 {
+  typedef _World_findPath_pcompare pcompare;
   typedef _World_findPath_IntDist IntDist;
   
-  path.clear();
+  path.resize(100);
+  path.resize(0);
 
   vector<IntDist> d(nodes.size());
   vector<int> heap;
@@ -399,20 +458,7 @@ void World::findPath()
     heap.push_back(i);
 
   d[0].d = 0; // start node;
-
-  // heap comparison functor
-  class pcompare
-  {
-  public:
-
-    vector<IntDist> & d;
-    pcompare(vector<IntDist> & d_) : d(d_) { }
-    operator()(int a, int b)
-    {
-      return d[a].d > d[b].d; // priority_queue puts max first
-    }
-  };
-  
+ 
   while(heap.size() > 0) 
   {
     make_heap(heap.begin(),heap.end(),pcompare(d));

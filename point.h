@@ -173,9 +173,32 @@ struct _convexHull_cpoint
   : point(point_), angle(angle_) { }
 };
 
+
+ // outside because of G++
+template<class InputIterator>
+class _convexHull_cpointLessThan
+{
+  typedef _convexHull_cpoint<InputIterator> cpoint;
+public:
+
+  bool operator()(cpoint a, cpoint b)
+  {
+    if (a.angle != b.angle)
+      return a.angle < b.angle;
+    else
+      return a.point->distanceTo(*pivot) < a.point->distanceTo(*pivot);
+  }
+  
+  _convexHull_cpointLessThan(InputIterator pivot_)
+  : pivot(pivot_) { } 
+  
+  InputIterator pivot;
+};
+
 template<class InputIterator, class OutputIterator>
 OutputIterator convexHull(InputIterator pointStart, InputIterator pointEnd, OutputIterator hullStart)
 {
+
   // orientation:
   //
   //    -x <-----> +x
@@ -186,6 +209,7 @@ OutputIterator convexHull(InputIterator pointStart, InputIterator pointEnd, Outp
   //       -y v
   
   typedef _convexHull_cpoint<InputIterator> cpoint;
+  typedef _convexHull_cpointLessThan<InputIterator> cpointLessThan;
   
   assert(pointEnd - pointStart >= 3); // need at least 3 points
   
@@ -197,24 +221,6 @@ OutputIterator convexHull(InputIterator pointStart, InputIterator pointEnd, Outp
       pivot = i;
   }
   
-  class cpointLessThan
-  {
-  public:
-    
-    operator()(cpoint a, cpoint b)
-    {
-      if (a.angle != b.angle)
-        return a.angle < b.angle;
-      else
-        return a.point->distanceTo(*pivot) < a.point->distanceTo(*pivot);
-    }
-    
-    cpointLessThan(InputIterator pivot_)
-    : pivot(pivot_) { } 
-    
-    InputIterator pivot;
-  };
-
   vector<cpoint> cpoints; // not really efficient if the function is called repeatedly
   typedef vector<cpoint>::iterator icpoint;
   

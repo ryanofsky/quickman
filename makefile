@@ -28,10 +28,13 @@ INCLUDE = -I$(INCD) -I$(X11D)include
 all: $(BIND)quickman
 	touch all
 
-$(OBJD)point_tr.o: $(SRCD)point_tr.c $(INCD)saphira.h
-	$(CC) $(CFLAGS) -c $(SRCD)point_tr.c $(INCLUDE) -o $(OBJD)point_tr.o
+$(OBJD)point_tr.o: $(SRCD)point_tr.cpp $(INCD)saphira.h $(SRCD)point.h  $(SRCD)qman.h  $(SRCD)smatrix.h  $(SRCD)world.h
+	$(CPP) $(CFLAGS) -c $(SRCD)point_tr.cpp $(INCLUDE) -o $(OBJD)point_tr.o
 
-$(BIND)quickman: $(OBJD)point_tr.o
-	$(CC) $(OBJD)point_tr.o -o $(BIND)quickman \
+$(OBJD)world.o: $(SRCD)world.cpp $(SRCD)point.h  $(SRCD)qman.h  $(SRCD)smatrix.h  $(SRCD)world.h
+	$(CPP) $(CFLAGS) -c $(SRCD)world.cpp $(INCLUDE) -o $(OBJD)world.o
+
+$(BIND)quickman: $(OBJD)point_tr.o $(OBJD)world.o
+	$(CPP) $(OBJD)point_tr.o $(OBJD)world.o -o $(BIND)quickman \
 -L$(LIBD) -lsf -L$(MOTIFD)lib $(LLIBS) -lc -lm 
 

@@ -1,8 +1,7 @@
 /*
                                      - Dr. Wily  */
-#define INPATH "M:/russ/My Documents/quickman/"
-#define OUTPATH "M:/russ/My Documents/quickman/out/"
-
+#define INPATH ""
+#define OUTPATH ""
 
 #include "saphira.h"
 //#include "qman.h"
@@ -353,20 +352,26 @@ WinMain (HANDLE hInst, HANDLE hPrevInstance, LPSTR lpszCmdLine, int nCmdShow)
   world.readFile(fp,world.goalarea);
   fclose(fp);
 
-
   world.growShapes();
   
   fp = fopen(OUTPATH "grow.txt","w");
   world.outputShapes(fp, world.vertices.begin(), world.vertices.end());
   world.outputShapes(fp, world.gvertices.begin(), world.gvertices.end());
- // fclose(fp); 
+  fclose(fp); 
+
+  world.describe();
 
   world.makeVisibility();
+
+  cerr << "how are you today?" << endl;
+  return 0;
  
-//  fp = fopen(OUTPATH "visibility.txt","w");
+  fp = fopen(OUTPATH "visibility.txt","w");
   world.outputShapes(fp, world.vertices.begin(), world.vertices.end());
   world.outputVisibility(fp);
   fclose(fp);
+
+
 
   world.findPath();
  
