@@ -9,9 +9,6 @@ class World
 {
 public:
 
-  //! Read obstacle file
-  void readFile(FILE * fp);
-
   //! grow obstacles 
   void growShapes();
 
@@ -57,6 +54,9 @@ public:
   //! array of shape vertices
   vector<Vertex> vertices;
 
+  vector<WPoint> startarea;
+  vector<WPoint> goalarea;
+
   //! Grown vertex
   struct GVertex : public Vertex
   {
@@ -99,6 +99,10 @@ protected:
   );
   
 public:
+
+  //! Read obstacle file
+  template<typename PointType>
+  void readFile(FILE * fp, vector<PointType> & vertices, vector<Shape> * shapes = NULL);
 
   void describe();
   

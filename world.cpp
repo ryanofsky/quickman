@@ -15,12 +15,12 @@ using std::endl;
 using std::stable_sort;
 using std::copy;
 
-void World::readFile(FILE * fp)
+template<typename PointType>
+void World::readFile(FILE * fp, vector<PointType> & vertices, vector<Shape> * shapes)
 {
   // clear out existing data
-  shapes.resize(0);
+  if (shapes) shapes->resize(0);
   vertices.resize(0);
-
 
   // state variables
   int shapeno = 0;
@@ -81,7 +81,7 @@ void World::readFile(FILE * fp)
 
               if (newlines > 1)
               {
-                shapes.push_back(Shape(lastvertexno,vertexno - lastvertexno));
+                if (shapes) shapes->push_back(Shape(lastvertexno,vertexno - lastvertexno));
                 ++shapeno;
                 vertex.shapeno = shapeno;
                 lastvertexno = vertexno;
@@ -444,9 +444,20 @@ void World::describe()
 void main()
 {
   World w;
-  FILE * fp = fopen("M:/russ/My Documents/quickman/obstacle.txt","r");
-  w.readFile(fp);
+  FILE * fp;
+  
+  fp = fopen("M:/russ/My Documents/quickman/obstacle.txt","r");
+  w.readFile(fp,w.vertices,&w.shapes);
   fclose(fp);
+
+  fp = fopen("M:/russ/My Documents/quickman/start.txt","r");
+  w.readFile(fp,w.startarea);
+  fclose(fp);
+
+  fp = fopen("M:/russ/My Documents/quickman/goal.txt","r");
+  w.readFile(fp,w.goalarea);
+  fclose(fp);
+
 
   w.growShapes();
   w.describe();
