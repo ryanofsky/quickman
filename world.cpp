@@ -1,4 +1,5 @@
 #include "world.h"
+#include "point.h"
 
 #include <stdio.h>
 #include <string>
@@ -10,7 +11,8 @@
 using std::string;
 using std::cerr;
 using std::endl;
-using std::stablesort;
+using std::stable_sort;
+using std::copy;
 
 void World::readFile(FILE * fp)
 {
@@ -94,6 +96,8 @@ void World::readFile(FILE * fp)
   }
 }
 
+// the first four points are the vertices of the robot.
+// the last point is the robot's reference point (center)
 World::WPoint World::robot[] = 
 {
   WPoint(0,0),
@@ -120,7 +124,7 @@ void World::growShapes()
   size_t vertexno = 0;
   
   // temporary storage for grown shapes  
-  vector<Shape> nshapes(shapes.size());
+  vector<Shape> nshapes;
   vector<GVertex> nvertices;  
   
   // scratch variables
@@ -131,25 +135,31 @@ void World::growShapes()
   typedef vector<WPoint>::iterator ipoint;
   typedef vector<GVertex>::iterator igvertex;
   
-  WPoint rreference = robot[DIM(robot)-1];
+  // rreference points to the robot's reference point
+  WPoint * rreference = &robot[DIM(robot)-1];
+
+  --rreference;
   
   //grow each shape   
-  for(ishape shape = shapes.begin(); shape != shapes.end(); ++shape)
+  for(ishape shape = shapes.begin(); shape != shapes.end(); ++shape) // for each shape
   {
     points.resize(0); // empty points array
-    for(int vertex = 0; vertex < shapes[shape].vertices; ++vertex)
+    
+    for(int vertex = 0; vertex < shape->vertices; ++vertex) // for each vertex
     {
       int vindex = shape->startidx + vertex;
+
       // find the robot's reference positions when each of its vertices touches the obstacle vertex
-      for(int rvertex = 0; rvertex < DIM(robot) - 1; ++rvertex)
-        points.push_back(points[vertex] + robot[rvertex] - rreference);
+      // load these positions into the "points" array
+      for(WPoint * rvertex = &robot[0]; rvertex != rreference; ++rvertex) // for each robot vertex
+        points.push_back(vertices[vindex] + *rvertex - *rreference);
     }
 
     // take the outermost shape made from these points
     convexHull(points, hull);
     
     // store the results
-    nshapes[shape] = Shape(vertexno,hull.size());
+    nshapes.push_back(Shape(vertexno,hull.size()));
     for(ipoint i = hull.begin(); i != hull.end(); ++i)
     {
       nvertices[vertexno] = GVertex(Vertex(*i),vertexno);
@@ -158,22 +168,22 @@ void World::growShapes()
   }
   
   // now look for overlapping shapes, if two shapes overlap, they need to be merged
-  Vector<bool> needsmerge(shapes.size());
+  vector<bool> needsmerge(shapes.size());
 
   for(ishape shape1 = nshapes.begin(); shape1 != nshapes.end(); ++shape1) 
   {
-    int sv1 = shape1->start_idx;     // start vertex
-    int ev1 = sv2 + shape1->vertices; // end vertex
+    int sv1 = shape1->startidx;     // start vertex
+    int ev1 = sv1 + shape1->vertices; // end vertex
     
     for(ishape shape2 = nshapes.begin(); shape2 != shape1; ++shape2) 
     {
 
-      int sv1 = shape1->start_idx;   // start vertex
-      int nv1 = shape1->vertices;    // number of vertices
+      int sv1 = shape1->startidx; // start vertex
+      int nv1 = shape1->vertices; // number of vertices
       int ev1 = sv1 + nv1;
 
-      int sv2 = shape2->start_idx;   // start vertex
-      int nv2 = shape2->vertices;    // number of vertices
+      int sv2 = shape2->startidx; // start vertex
+      int nv2 = shape2->vertices; // number of vertices
       int ev2 = sv2 + nv2;
       
       for(int e1 = sv1; e1 < ev1; ++e1) // for each edge of shape1
@@ -186,7 +196,7 @@ void World::growShapes()
           GVertex & R = nvertices[e2];
           GVertex & S = nvertices[(e2+1)%nv1];
           
-          if (Points::linesIntersect(P,Q,R,S)) // is this result worth caching somewhere?
+          if (linesIntersect(P,Q,R,S)) // is this result worth caching somewhere?
           {
             shape2->vertices = 0;
             needsmerge[R.shapeno] = true;
@@ -198,31 +208,37 @@ void World::growShapes()
       }
     }
     intersection_found:
+    continue;
   }
   
   class lessthan // comparison functor
   {
+  public:
     operator()(GVertex a, GVertex b)
     {
       return a.shapeno < b.shapeno;
     }
   };
-  
-  
-  stablesort(nvertices.begin(),nvertices.end(),lessthan());
-  
-  int lastshape = 0;
-  int lastv = nvertices.begin();
-  int shape = 0;
+
+  stable_sort(nvertices.begin(),nvertices.end(),lessthan());
+
   gshapes.resize(0);
   gvertices.resize(0);
+
+  
+  int lastshape = 0;
+  int shape = 0;
+  igvertex lastv = nvertices.begin();
   for(igvertex v = nvertices.begin();; ++v)
   {
     bool done = v == nvertices.end();
     
     if (done || v->shapeno != lastshape)
     {
-      convexHull(copy(nvertices,lastv,v),hull);
+      points.resize(0);
+      ipoint p = points.begin();
+      copy(lastv,v,p);
+      convexHull(points,hull);
       
       // store the results
       gshapes[shape] = Shape(vertexno,hull.size());
@@ -237,13 +253,15 @@ void World::growShapes()
     
     if (done) break;
     
-    lastshape = v->lastshape;
+    lastshape = v->shapeno;
   }
 };
 
   
 void World::makeVisibility()
 {
+  typedef vector<Shape>::iterator ishape;
+
   int gpl = gvertices.size();
   
   for(int p = 0; p < gpl; ++p)
@@ -254,23 +272,24 @@ void World::makeVisibility()
     if (P.shapeno == Q.shapeno)
     {
       int nv = shapes[P.shapeno].vertices;
-      gvisibility(p,q) = (p-q == 1 || p-q == nv-1) ? VISIBLE : BLOCKED;
+      visibility(p,q) = (p-q == 1 || p-q == nv-1);
     }
     else
     {
-      bool visible = true
-      for(ishape shape = nshapes.begin(); shape != nshapes.end; ++shape) 
+      bool visible = true;
+      for(ishape shape = gshapes.begin(); shape != gshapes.end(); ++shape) 
       {
-        int sv = shape->start_idx;   // start vertex
+        int sv = shape->startidx;   // start vertex
         int nv = shape->vertices;    // number of vertices
         int ev = sv + nv;
 
-        for(int e = sv; e < ev; ++e1) // for each edge of shape
+        for(int e = sv; e < ev; ++e) // for each edge of shape
         {
-          GVertex & R = nvertices[e1];
-          GVertex & S = nvertices[(e1+1)%nv1];
+          GVertex & R = gvertices[e];
+          GVertex & S = gvertices[(e+1)%nv];
           
-          if (lineIntersects(P,Q,R,S))
+          if (linesIntersect(P,Q,R,S))
+          if (true)
           {
             visible = false;
             goto notvisible;

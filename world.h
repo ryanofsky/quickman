@@ -12,7 +12,10 @@ public:
   //! Read obstacle file
   void readFile(FILE * fp);
 
-  //! grow obstacles and generate visibility graph
+  //! grow obstacles 
+  void growShapes();
+
+  // generate visibility graph
   void makeVisibility();
   
   //! find the optimal path through the obstacles  
@@ -28,6 +31,8 @@ public:
     //! Not part of a shape. -1 is not a valid index the shape array.
     enum { NONE = -1 };
     
+    Vertex() : WPoint() {}
+
     Vertex(coord x, coord y, int shapeno_ = NONE)
     : WPoint(x,y), shapeno(shapeno_) { }
     
@@ -57,6 +62,7 @@ public:
   {
     //! array index of nearest actual vertex
     int vertexno;
+    GVertex() : Vertex() {}
     GVertex(Vertex const & vertex, int vertexno_)
     : Vertex(vertex), vertexno(vertexno_) {}
   };
