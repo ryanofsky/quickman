@@ -1,11 +1,16 @@
 /*
                                      - Dr. Wily  */
-#define INPATH ""
-#define OUTPATH ""
+#ifdef RUSS
+#define INPATH "m:/russ/My Documents/quickman/"
+#define OUTPATH "m:/russ/My Documents/quickman/"
+#else
+#define INPATH
+#define OUTPATH
+#endif
 
 #include "saphira.h"
-//#include "qman.h"
 #include "world.h"
+#include "general.h"
 
 #define KEY(x) (d[heap[x]].d)
 #define SWAP(x,y) (x) ^= (y); (y) ^= (x); (x) ^= (y)
@@ -69,7 +74,7 @@ void follow_points(void) {
   case MOVING:
     if(sfDonePosition(100)) {
       ++current;
-      if(!current) process_state = GOAL;
+      if(current == path.end() - 1) process_state = GOAL;
       else { /* process_state = DONE_MOVING;*/
         robot_pos.x = 4235 - sfRobot.ay;
         robot_pos.y = sfRobot.ax + 475;
@@ -330,56 +335,55 @@ void myConnect(void)
 void main(int argc, char **argv)
 #endif
 #ifdef MS_WINDOWS
+#ifdef MS_CONSOLE
+int main()
+#else
 int WINAPI WinMain( HINSTANCE hInst, HINSTANCE hPreInst, LPSTR lpszCmdLine, int nCmdShow )
-/*
-int PASCAL
-WinMain (HANDLE hInst, HANDLE hPrevInstance, LPSTR lpszCmdLine, int nCmdShow)
-*/
+#endif
 #endif
 {
- 
-  FILE * fp;
+  try
+  { 
+    CFile obstacle(INPATH "obstacle.txt", "r");
+    world.readFile(obstacle,world.vertices,&world.shapes);
+
+    CFile start(INPATH "start.txt","r");
+    world.readFile(start,world.startarea);
+
+    CFile goal(INPATH "goal.txt","r");
+    world.readFile(goal,world.goalarea);
+
+    world.growShapes();
   
-  fp = fopen(INPATH "obstacle.txt","r");
-  world.readFile(fp,world.vertices,&world.shapes);
-  fclose(fp);
+    CFile grown(OUTPATH "grown.txt","w");
+    world.outputShapes(grown, world.vertices.begin(), world.vertices.end());
+    world.outputShapes(grown, world.gvertices.begin(), world.gvertices.end());
 
-  fp = fopen(INPATH "start.txt","r");
-  world.readFile(fp,world.startarea);
-  fclose(fp);
+    world.makeVisibility();
 
-  fp = fopen(INPATH "goal.txt","r");
-  world.readFile(fp,world.goalarea);
-  fclose(fp);
+    // This statement causes an access violation!!??? 
+    //CFile visibility(OUTPATH "visibility.txt","w");
 
-  world.growShapes();
-  
-  fp = fopen(OUTPATH "grow.txt","w");
-  world.outputShapes(fp, world.vertices.begin(), world.vertices.end());
-  world.outputShapes(fp, world.gvertices.begin(), world.gvertices.end());
-  fclose(fp); 
 
-  world.describe();
+    CFile & visibility = grown;
+    world.outputShapes(visibility, world.vertices.begin(), world.vertices.end());
+    world.outputVisibility(visibility);
 
-  world.makeVisibility();
-
-  cerr << "how are you today?" << endl;
-  return 0;
+    world.findPath();
  
-  fp = fopen(OUTPATH "visibility.txt","w");
-  world.outputShapes(fp, world.vertices.begin(), world.vertices.end());
-  world.outputVisibility(fp);
-  fclose(fp);
-
-
-
-  world.findPath();
- 
-  fp = fopen(OUTPATH "path.txt","w");
-  world.outputShapes(fp, world.vertices.begin(), world.vertices.end());
-  world.outputTargets(fp);
-  world.outputPath(fp);
-  fclose(fp);
+    CFile thepath(OUTPATH "path.txt","w");
+    world.outputShapes(thepath, world.vertices.begin(), world.vertices.end());
+    world.outputTargets(thepath);
+    world.outputPath(thepath);
+  }
+  catch(SimpleException e)  
+  {
+    e.print();
+  }
+  catch(...)
+  {
+    cerr << "Unknown exception caught" << endl;
+  }
  
   sfOnConnectFn(myConnect);     /* register a connection function */
   sfOnStartupFn(myStartup);     /* register a startup function */
@@ -387,10 +391,10 @@ WinMain (HANDLE hInst, HANDLE hPrevInstance, LPSTR lpszCmdLine, int nCmdShow)
   sfStartup(0);                 /* start up the Saphira window */
 #endif
 #ifdef MS_WINDOWS
+#ifndef MS_CONSOLE
   sfStartup(hInst, nCmdShow, 0); 
+#endif  
   return 0;
 #endif
-}
-
-
+};
 

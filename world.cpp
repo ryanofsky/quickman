@@ -9,8 +9,10 @@
 #include <algorithm>
 #include <assert.h>
 
+using std::cout;
+
 using std::string;
-using std::cerr;
+//using std::cerr;
 using std::endl;
 using std::stable_sort;
 using std::make_heap;
@@ -265,8 +267,6 @@ World::GVertex & World::get_node(int i)
 
 void World::makeVisibility()
 {
-  cout << "1" << endl;
-  
   typedef vector<WPoint>::iterator ipoint;
   typedef vector<GVertex>::iterator ivertex;
   typedef vector<Shape>::iterator ishape;
@@ -324,12 +324,6 @@ void World::makeVisibility()
   }  
   nodes.push_back(GOAL);
   
-  cerr << "before 2" << endl;
-  describe();
-  cerr << "after 2" << endl;
-  
-  cout << "2" << endl;
-
   int gpl = nodes.size();
  
   isvisible.resize(gpl);
@@ -338,36 +332,16 @@ void World::makeVisibility()
   for(int p = 0; p < gpl; ++p) // try each potential visiblity graph edge
   for(int q = 0; q < p; ++q)
   {
-    cout << "p = " << p << " q = " << q << endl;
-    bool broken = (p >=56);
-    
     GVertex & P = get_node(p);
     GVertex & Q = get_node(q);
-    
-if (broken)
-{
-   cout << "nodes[p] = " << nodes[p] << " nodes[q] = " << nodes[q] << endl;
-}
-    
+
     if (P.shapeno == Q.shapeno && P.shapeno >= 0)
     {
       int nv = gshapes[P.shapeno].vertices;
       isvisible(p,q) = (p - q== 1 || p - q == gshapes[P.shapeno].vertices - 1);
-if (broken)
-{
-   cout << "A" << endl;
-}
-
-
     }
     else
     {
-
-if (broken)
-{
-   cout << "B" << endl;
-}
-
       bool visible = true;
       // 
       for(ishape shape = gshapes.begin(); shape != gshapes.end(); ++shape) 
@@ -375,12 +349,6 @@ if (broken)
         int sv = shape->startidx;   // start vertex
         int nv = shape->vertices;    // number of vertices
         int ev = sv + nv;
-
-if (broken)
-{
-   if (sv == 68) describe();
-   cout << " sv = " << sv <<  " nv = " << nv <<  " ev = " << ev << endl;
-}
 
         for(int e = sv; e < ev; ++e) // for each edge of shape
         {
@@ -394,28 +362,10 @@ if (broken)
           }
         }        
       }
-
-if (broken)
-{
-   cout << "C" << endl;
-}
-
       notvisible:
       isvisible(p,q) = visible;
-
-if (broken)
-{
-   cout << "D" << endl;
-}
-      
       if (visible)
         distanceCache(p,q) = P.distanceTo(Q);
-
-if (broken)
-{
-   cout << "E" << endl;
-}
-        
     }
   }
 }  

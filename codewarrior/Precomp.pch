@@ -1,0 +1,7 @@
+#include <Win32Headers++.mch>
+
+#pragma precompile_target "Precomp.mch"
+
+# define RUSS 1
+# define _STLP_DEBUG 1
+# define MS_CONSOLE 1
