@@ -124,7 +124,141 @@ public:
   
   template<class InputIterator>
   void outputShapes(FILE * fp, InputIterator istart, InputIterator iend);
+
+  void outputTargets(FILE * fp);
+  void outputVisibility(FILE * fp);
+  void outputPath(FILE * fp);
   
 };
+
+
+/////////////////////////////////////////////////////////////////// DEFINITIONS
+
+#include <string>
+#include <iostream>
+
+using std::string;
+using std::cerr;
+using std::endl;
+
+
+template<typename PointType>
+void World::readFile(FILE * fp, vector<PointType> & vertices, vector<Shape> * shapes)
+{
+  // clear out existing data
+  if (shapes) shapes->resize(0);
+  vertices.resize(0);
+
+  // state variables
+  int shapeno = 0;
+  int vertexno = 0;
+  int lastvertexno = 0;
+  Vertex vertex(0,0,shapeno);
+
+  enum { XCOORD, YCOORD, CRUFT };
+  int state = XCOORD;
+
+  int newlines(0);
+  int lineno = 1;
+  string num = "";
+
+  const size_t BUFFERSIZE = 4096;
+  size_t buffer_size;
+  char buffer[BUFFERSIZE];
+  for(;;)
+  {
+    buffer_size = fread(buffer,sizeof(char), BUFFERSIZE, fp);
+
+    for(size_t p = 0; p <= buffer_size; ++p)
+    {
+      char c;
+
+      if (buffer_size == 0)
+      {
+        newlines = 2;
+        c = 0;
+      }
+      else
+        c = buffer[p];
+      
+      bool is_whitespace = c <= 32;
+      bool is_num = isdigit(c) || c == '-';
+      bool is_line = c == '\n';
+      
+      if (is_num)
+        num += c;
+      else
+      {
+        if (num.length() > 0 || buffer_size == 0) // new field found
+        {
+          if (newlines > 0)
+          {
+            if (vertexno != 0 || state == CRUFT) // ignore leading newlines
+            {  
+              if (state < CRUFT)
+                cerr << "Parse error on line " << lineno << ". Vertex " << vertexno << " has invalid x or y coordinates" << endl;
+              state = XCOORD;
+
+              // if the last vertex is the same as the first one, don't add it
+              if (newlines <= 1 || !vertex.equals(vertices[lastvertexno]))
+              {
+                vertices.push_back(vertex);
+                ++vertexno;
+              }
+
+              if (newlines > 1)
+              {
+                if (shapes) shapes->push_back(Shape(lastvertexno,vertexno - lastvertexno));
+                ++shapeno;
+                vertex.shapeno = shapeno;
+                lastvertexno = vertexno;
+              }
+            }  
+            newlines = 0;
+          }
+         
+          if (state == XCOORD)
+            vertex.x = atoi(num.c_str());
+          else if (state == YCOORD)
+            vertex.y = atoi(num.c_str());
+          else
+            cerr << "Cruft '" << num << "' found on line " << lineno << "." << endl;
+          
+          if (state < CRUFT) ++state;
+          num = "";
+        } // num.length() > 0
+        
+        if (is_line) { ++newlines; ++lineno; }
+      }
+    } // for p
+    if (buffer_size == 0) break;
+  }
+}
+
+template<class InputIterator>
+void World::outputShapes(FILE * fp, InputIterator istart, InputIterator iend)
+{
+  if (istart == iend) return;
+  
+  int lastshape = istart->shapeno;
+  InputIterator firsti = istart;
+  
+  for(InputIterator i = istart;; ++i)
+  {
+    bool over = i == iend;
+    
+    if (over || lastshape != i->shapeno)
+    {
+      fprintf(fp, "%i %i\n\n",firsti->x,firsti->y);
+      firsti = i;
+    }
+   
+    if (over) break;
+    
+    fprintf(fp, "%i %i\n",i->x,i->y);
+    
+    lastshape = i->shapeno;
+  }
+}
 
 #endif

@@ -1,5 +1,8 @@
 /*
                                      - Dr. Wily  */
+#define INPATH "M:/russ/My Documents/quickman/"
+#define OUTPATH "M:/russ/My Documents/quickman/out/"
+
 
 #include "saphira.h"
 //#include "qman.h"
@@ -335,9 +338,44 @@ WinMain (HANDLE hInst, HANDLE hPrevInstance, LPSTR lpszCmdLine, int nCmdShow)
 */
 #endif
 {
-  /*  test_plots();
-  testDijkstra();
-  return;*/
+ 
+  FILE * fp;
+  
+  fp = fopen(INPATH "obstacle.txt","r");
+  world.readFile(fp,world.vertices,&world.shapes);
+  fclose(fp);
+
+  fp = fopen(INPATH "start.txt","r");
+  world.readFile(fp,world.startarea);
+  fclose(fp);
+
+  fp = fopen(INPATH "goal.txt","r");
+  world.readFile(fp,world.goalarea);
+  fclose(fp);
+
+
+  world.growShapes();
+  
+  fp = fopen(OUTPATH "grow.txt","w");
+  world.outputShapes(fp, world.vertices.begin(), world.vertices.end());
+  world.outputShapes(fp, world.gvertices.begin(), world.gvertices.end());
+ // fclose(fp); 
+
+  world.makeVisibility();
+ 
+//  fp = fopen(OUTPATH "visibility.txt","w");
+  world.outputShapes(fp, world.vertices.begin(), world.vertices.end());
+  world.outputVisibility(fp);
+  fclose(fp);
+
+  world.findPath();
+ 
+  fp = fopen(OUTPATH "path.txt","w");
+  world.outputShapes(fp, world.vertices.begin(), world.vertices.end());
+  world.outputTargets(fp);
+  world.outputPath(fp);
+  fclose(fp);
+ 
   sfOnConnectFn(myConnect);     /* register a connection function */
   sfOnStartupFn(myStartup);     /* register a startup function */
 #ifdef IS_UNIX

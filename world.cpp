@@ -18,99 +18,6 @@ using std::pop_heap;
 using std::copy;
 using std::reverse;
 
-template<typename PointType>
-void World::readFile(FILE * fp, vector<PointType> & vertices, vector<Shape> * shapes)
-{
-  // clear out existing data
-  if (shapes) shapes->resize(0);
-  vertices.resize(0);
-
-  // state variables
-  int shapeno = 0;
-  int vertexno = 0;
-  int lastvertexno = 0;
-  Vertex vertex(0,0,shapeno);
-
-  enum { XCOORD, YCOORD, CRUFT };
-  int state = XCOORD;
-
-  int newlines(0);
-  int lineno = 1;
-  string num = "";
-
-  const size_t BUFFERSIZE = 4096;
-  size_t buffer_size;
-  char buffer[BUFFERSIZE];
-  for(;;)
-  {
-    buffer_size = fread(buffer,sizeof(char), BUFFERSIZE, fp);
-
-    for(size_t p = 0; p <= buffer_size; ++p)
-    {
-      char c;
-
-      if (buffer_size == 0)
-      {
-        newlines = 2;
-        c = 0;
-      }
-      else
-        c = buffer[p];
-      
-      bool is_whitespace = c <= 32;
-      bool is_num = isdigit(c) || c == '-';
-      bool is_line = c == '\n';
-      
-      if (is_num)
-        num += c;
-      else
-      {
-        if (num.length() > 0 || buffer_size == 0) // new field found
-        {
-          if (newlines > 0)
-          {
-            if (vertexno != 0 || state == CRUFT) // ignore leading newlines
-            {  
-              if (state < CRUFT)
-                cerr << "Parse error on line " << lineno << ". Vertex " << vertexno << " has invalid x or y coordinates" << endl;
-              state = XCOORD;
-
-              // if the last vertex is the same as the first one, don't add it
-              if (newlines <= 1 || !vertex.equals(vertices[lastvertexno]))
-              {
-                vertices.push_back(vertex);
-                ++vertexno;
-              }
-
-              if (newlines > 1)
-              {
-                if (shapes) shapes->push_back(Shape(lastvertexno,vertexno - lastvertexno));
-                ++shapeno;
-                vertex.shapeno = shapeno;
-                lastvertexno = vertexno;
-              }
-            }  
-            newlines = 0;
-          }
-         
-          if (state == XCOORD)
-            vertex.x = atoi(num.c_str());
-          else if (state == YCOORD)
-            vertex.y = atoi(num.c_str());
-          else
-            cerr << "Cruft '" << num << "' found on line " << lineno << "." << endl;
-          
-          if (state < CRUFT) ++state;
-          num = "";
-        } // num.length() > 0
-        
-        if (is_line) { ++newlines; ++lineno; }
-      }
-    } // for p
-    if (buffer_size == 0) break;
-  }
-}
-
 // the first four points are the vertices of the robot.
 // the last point is the robot's reference point (center)
 World::WPoint World::robot[] = 
@@ -339,12 +246,19 @@ bool World::noIntersect
 
 World::GVertex & World::get_node(int i)
 {
-  if (i == START)
+  if (nodes[i] == START)
     return start;
-  else if (i == GOAL)
+  else if (nodes[i] == GOAL)
     return goal;
   else
-    return gvertices[i];
+  {
+    int n = nodes[i];
+    World::GVertex y = gvertices[nodes[i]];
+    
+    return gvertices[nodes[i]];
+  }  
+    
+    
 }
 
 
@@ -362,6 +276,8 @@ void World::makeVisibility()
     goal = goal + *v;
   goal = goal / (goalarea.end() - goalarea.begin());
 
+  nodes.resize(gvertices.size()+2);
+  nodes.resize(0);
   nodes.push_back(START);
   
   typedef vector<GVertex>::iterator ivertex;
@@ -369,6 +285,7 @@ void World::makeVisibility()
   
   // fill up nodes array, include start and goal points,
   // exclude any points that are inside obstacles
+
   for(ivertex v = gvertices.begin(); v != gvertices.end(); ++v)
   {
     double th;  
@@ -399,23 +316,35 @@ void World::makeVisibility()
     }
     if (!reject)
     {
-      nodes.push_back(v - gvertices.begin());
+      if (nodes.size() == 28)
+      {
+        cerr << "wow";
+      }
+      int wsd = v - gvertices.begin();
+      nodes.push_back(wsd);
     }
   }  
   nodes.push_back(GOAL);
   
 
-
   int gpl = nodes.size();
+ 
+  isvisible.resize(gpl);
+  distanceCache.resize(gpl);
   
   for(int p = 0; p < gpl; ++p) // try each potential visiblity graph edge
   for(int q = 0; q < p; ++q)
   {
+    if (p == 29)
+    {
+      cerr << "ehllsd";
+    }
+    
     GVertex & P = get_node(p);
     GVertex & Q = get_node(q);
     if (P.shapeno == Q.shapeno && P.shapeno >= 0)
     {
-      int nv = shapes[P.shapeno].vertices;
+      int nv = gshapes[P.shapeno].vertices;
       isvisible(p,q) = (p - q== 1 || p - q == gshapes[P.shapeno].vertices - 1);
     }
     else
@@ -520,32 +449,57 @@ void World::findPath()
   reverse(path.begin(), path.end());
 }
 
-template<class InputIterator>
-void World::outputShapes(FILE * fp, InputIterator istart, InputIterator iend)
+void World::outputVisibility(FILE * fp)
 {
-  if (istart == iend) return;
-  
-  int lastshape = istart->shapeno;
-  InputIterator firsti = istart;
-  
-  cerr << "i\tx\ty\tshapeno" << endl;
-  for(InputIterator i = istart;; ++i)
+  for(int i = 0; i < isvisible.size(); ++i)
+  for(int j = 0; j < i; ++j)
   {
-    bool over = i == iend;
-    
-    if (over || lastshape != i->shapeno)
+    if (isvisible(i,j))
     {
-      fprintf(fp, "%i %i\n\n",firsti->x,firsti->y);
-      firsti = i;
+      GVertex I = get_node(i);
+      GVertex J = get_node(j);
+      fprintf(fp, "%i %i\n%i %i\n\n",I.x,I.y,J.x,J.x);
     }
-   
-    if (over) break;
-    
-    fprintf(fp, "%i %i\n",i->x,i->y);
-    
-    lastshape = i->shapeno;
   }
 }
+
+void World::outputPath(FILE * fp)
+{
+  for(vector<int>::iterator p = path.begin(); p != path.end(); ++p)
+  {
+    GVertex g = get_node(*p);
+    fprintf(fp, "%i %i\n",g.x,g.y);
+  }
+  fprintf(fp, "\n");
+}
+
+void World::outputTargets(FILE * fp)
+{
+  typedef vector<WPoint>::iterator ivertex;
+  
+  for(ivertex i = goalarea.begin(); ; ++i)
+  {
+    if (i == goalarea.end())
+    {
+      fprintf(fp, "%i %i\n\n",goalarea[0].x,goalarea[0].y);
+      break;
+    }
+    else
+      fprintf(fp, "%i %i\n",i->x,i->y);
+  }
+  
+  for(ivertex i = startarea.begin(); ; ++i)
+  {
+    if (i == startarea.end())
+    {
+      fprintf(fp, "%i %i\n\n",startarea[0].x,startarea[0].y);
+      break;
+    }
+    else
+      fprintf(fp, "%i %i\n",i->x,i->y);
+  }
+}  
+
 
 void World::describe()
 {
@@ -586,31 +540,3 @@ void World::describe()
          << endl;
   }  
 }
-/*
-void main()
-{
-  World w;
-  FILE * fp;
-  
-  fp = fopen("M:/russ/My Documents/quickman/obstacle.txt","r");
-  w.readFile(fp,w.vertices,&w.shapes);
-  fclose(fp);
-
-  fp = fopen("M:/russ/My Documents/quickman/start.txt","r");
-  w.readFile(fp,w.startarea);
-  fclose(fp);
-
-  fp = fopen("M:/russ/My Documents/quickman/goal.txt","r");
-  w.readFile(fp,w.goalarea);
-  fclose(fp);
-
-
-  w.growShapes();
-  w.describe();
-  
-  fp = fopen("M:/russ/My Documents/quickman/rgrow.txt","w");
-  w.outputShapes(fp, w.vertices.begin(), w.vertices.end());
-  w.outputShapes(fp, w.gvertices.begin(), w.gvertices.end());
-  fclose(fp);
-}
-*/
