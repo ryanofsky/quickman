@@ -28,7 +28,7 @@ private:
 
   size_t inline pos(size_t x, size_t y)
   {
-    return x > y ? (y*(y+1))/2 + x : (x*(x+1))/2 + y;
+    return x < y ? (y*(y+1))/2 + x : (x*(x+1))/2 + y;
   }
 
   void cleanup()
@@ -71,8 +71,8 @@ public:
   
   void resize(size_t ndim)
   {
-    size_t size = pos(dim,0);
-    size_t nsize = pos(ndim,0);
+    size_t size = pos(0,dim);
+    size_t nsize = pos(0,ndim);
     size = min(size,nsize);
     T * ndata = new T[nsize];
     try
@@ -94,5 +94,7 @@ private:
   SMatrix(SMatrix const &) { }
   SMatrix & operator=(SMatrix const &) { return *this; }
 };
+
+
 
 #endif

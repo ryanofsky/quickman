@@ -8,16 +8,6 @@
 class World
 {
 public:
-
-  //! grow obstacles 
-  void growShapes();
-
-  // generate visibility graph
-  void makeVisibility();
-  
-  //! find the optimal path through the obstacles  
-  void findPath();
-
   typedef int coord;
   typedef Point<coord> WPoint;
 
@@ -35,7 +25,6 @@ public:
     
     Vertex(WPoint const & wpoint, int shapeno_ = NONE)
     : WPoint(wpoint), shapeno(shapeno_) { }
-    
   };
   
   struct Shape
@@ -47,16 +36,6 @@ public:
     : startidx(startidx_), vertices(vertices_) { } 
   };
   
-  
-  //! array of shapes
-  vector<Shape> shapes;
-  
-  //! array of shape vertices
-  vector<Vertex> vertices;
-
-  vector<WPoint> startarea;
-  vector<WPoint> goalarea;
-
   //! Grown vertex
   struct GVertex : public Vertex
   {
@@ -64,7 +43,8 @@ public:
     int vertexno;
     GVertex() : Vertex() {}
 
-    GVertex(WPoint pnt, int vertexno_ = NONE)
+    template<typename T>
+    GVertex(Point<T> pnt, int vertexno_ = NONE)
     : Vertex(pnt), vertexno(vertexno_) {}
 
     GVertex(Vertex vertex, int vertexno_ = NONE)
@@ -74,16 +54,20 @@ public:
     : Vertex(wpoint,shapeno), vertexno(vertexno_) {}
   };
   
+  //! array of shapes
+  vector<Shape> shapes;
+
   //! array of grown shapes
   vector<Shape> gshapes;
   
   //! array of grown vertices
   vector<GVertex> gvertices;
   
+  vector<Vertex> vertices;
+  vector<WPoint> startarea;
+  vector<WPoint> goalarea;
   GVertex start;
   GVertex goal;  
-
-protected:
 
   enum { START = -1, GOAL = -2 };
 
@@ -96,15 +80,41 @@ protected:
   //! visibility graph as an adjacency matrix, indices are the same as "nodes" indices.
   SMatrix<double> distanceCache;
 
-public:
-
-  //! optimal path of grown vertices, comprised indices into the gvertices array
+  //! optimal path of grown vertices, comprised of indices into the gvertices array
   vector<int> path;
-  
-protected:
 
+  // robot dimensions and reference point
   static WPoint robot[];
 
+  //! grow obstacles using method described in hw. m is a multipler for the size of the robot
+  void growShapes(double m);
+
+  //! grow obstacles with a faster & simpler algorithm
+  void fgrowShapes(double amount);
+
+  // generate visibility graph
+  void makeVisibility();
+  
+  //! find the optimal path through the obstacles  
+  void findPath();
+
+  //! Read obstacle file
+  template<typename PointType>
+  void readFile(FILE * fp, vector<PointType> & vertices, vector<Shape> * shapes = NULL);
+
+  template<class InputIterator>
+  void outputShapes(FILE * fp, InputIterator istart, InputIterator iend);
+
+  void outputTargets(FILE * fp);
+  void outputVisibility(FILE * fp);
+  void outputPath(FILE * fp);
+  void describe(bool show_vertices, bool show_gvertices, bool show_nodes, bool show_visibility);
+
+  //! update visibility and distance tables with for starting position. findpath() should be called next
+  void reorient();
+
+  //! same as reorient(), but takes into account a new circular obstacle
+  void reorient(WPoint newobstacle, coord radius);
 
   bool noIntersect
   (
@@ -112,23 +122,66 @@ protected:
     vector<Shape> & safter, vector<GVertex> & vafter
   );
   
-  GVertex & get_node(int i);
+  GVertex const & get_node(int i);
  
-public:
+  class PathIterator
+  {
+  public:
+    typedef vector<int>::const_iterator pit;
+    pit i;
+    World & world;
+    
+    
+    PathIterator(World & world_) : world(world_) { }
+    GVertex const * operator->()
+    {
+      return &world.get_node(*i);
+    };
+    
+    GVertex const & operator*()
+    {
+      return world.get_node(*i);
+    }
+    
+    bool isLast()
+    {
+      return i == world.path.begin();
+    }
+    
+    GVertex const & next()
+    {
+      return world.get_node(*(i - 1));
+    }
 
-  //! Read obstacle file
-  template<typename PointType>
-  void readFile(FILE * fp, vector<PointType> & vertices, vector<Shape> * shapes = NULL);
+    PathIterator & operator=(pit n)
+    {
+      i = n;
+      return *this;
+    }
 
-  void describe();
-  
-  template<class InputIterator>
-  void outputShapes(FILE * fp, InputIterator istart, InputIterator iend);
-
-  void outputTargets(FILE * fp);
-  void outputVisibility(FILE * fp);
-  void outputPath(FILE * fp);
-  
+    PathIterator & operator=(vector<int>::iterator n)
+    {
+      i = n;
+      return *this;
+    }
+    
+    PathIterator & operator=(PathIterator & pi)
+    {
+      i = pi.i;
+      return *this;
+    }
+    
+    int number()
+    {
+      return world.path.end() - i;
+    }
+    
+    PathIterator & operator--()
+    {
+      --i;
+      return *this;
+    }
+  };
 };
 
 
