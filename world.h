@@ -33,7 +33,7 @@ public:
     Vertex(coord x, coord y, int shapeno_ = NONE)
     : WPoint(x,y), shapeno(shapeno_) { }
     
-    explicit Vertex(WPoint const & wpoint, int shapeno_ = NONE)
+    Vertex(WPoint const & wpoint, int shapeno_ = NONE)
     : WPoint(wpoint), shapeno(shapeno_) { }
     
   };
@@ -64,7 +64,10 @@ public:
     int vertexno;
     GVertex() : Vertex() {}
 
-    GVertex(Vertex vertex, int vertexno_)
+    GVertex(WPoint pnt, int vertexno_ = NONE)
+    : Vertex(pnt), vertexno(vertexno_) {}
+
+    GVertex(Vertex vertex, int vertexno_ = NONE)
     : Vertex(vertex), vertexno(vertexno_) {}
 
     GVertex(WPoint const & wpoint, int shapeno, int vertexno_)
@@ -76,15 +79,26 @@ public:
   
   //! array of grown vertices
   vector<GVertex> gvertices;
+  
+  GVertex start;
+  GVertex goal;  
 
 protected:
 
-  //! visibility graph as an adjacency matrix
-  SMatrix<bool> visibility;
+  enum { START = -1, GOAL = -2 };
+
+  //! START or GOAL values or indices of points in the gvertices array that are not inside other polygons
+  vector<int> nodes;
+
+  //! visibility graph as an adjacency matrix, indices are the same as "nodes" indices.
+  SMatrix<bool> isvisible;
+
+  //! visibility graph as an adjacency matrix, indices are the same as "nodes" indices.
+  SMatrix<double> distanceCache;
 
 public:
 
-  //! optimal path of grown vertices
+  //! optimal path of grown vertices, comprised indices into the gvertices array
   vector<int> path;
   
 protected:
@@ -98,6 +112,8 @@ protected:
     vector<Shape> & safter, vector<GVertex> & vafter
   );
   
+  GVertex & get_node(int i);
+ 
 public:
 
   //! Read obstacle file

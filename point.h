@@ -53,6 +53,9 @@ struct Point
   //! Convenient subtraction function
   Point<T> inline operator-(Point<T> c) const;   
   
+  //! Convenient division function
+  Point<T> inline operator/(T c) const; 
+  
   //! Point has the same coordinates as c
   bool inline equals(Point<T> c) const;
 };
@@ -78,6 +81,12 @@ template<typename T>
 Point<T> Point<T>::operator-(Point<T> c) const
 {
   return Point(x - c.x, y - c.y);
+}
+
+template<typename T>
+Point<T> Point<T>::operator/(T c) const
+{
+  return Point(x/c, y/c);
 }
 
 template<typename T>

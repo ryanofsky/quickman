@@ -13,7 +13,10 @@ using std::string;
 using std::cerr;
 using std::endl;
 using std::stable_sort;
+using std::make_heap;
+using std::pop_heap;
 using std::copy;
+using std::reverse;
 
 template<typename PointType>
 void World::readFile(FILE * fp, vector<PointType> & vertices, vector<Shape> * shapes)
@@ -178,6 +181,9 @@ void World::growShapes()
     }
   }
   
+  /*
+  
+  don't use this after all...
   
   vector<Shape> *s1(&nshapes), *s2(&gshapes);
   vector<GVertex> *v1(&nvertices), *v2(&gvertices);  
@@ -191,6 +197,11 @@ void World::growShapes()
   
   gshapes = *s1;
   gvertices = *v1;
+  
+  */
+  
+  gshapes = nshapes;
+  gvertices = nvertices;
   
 };
 
@@ -324,27 +335,93 @@ bool World::noIntersect
     lastshape = v->shapeno;
   }
   return true;
+};
+
+World::GVertex & World::get_node(int i)
+{
+  if (i == START)
+    return start;
+  else if (i == GOAL)
+    return goal;
+  else
+    return gvertices[i];
 }
+
 
 void World::makeVisibility()
 {
+  typedef vector<WPoint>::iterator ipoint;
+  typedef vector<GVertex>::iterator ivertex;
   typedef vector<Shape>::iterator ishape;
 
-  int gpl = gvertices.size();
+  for(ipoint v = startarea.begin(); v != startarea.end(); ++v)
+    start = start + *v;
+  start = start / (startarea.end() - startarea.begin());
+
+  for(ipoint v = goalarea.begin(); v != goalarea.end(); ++v)
+    goal = goal + *v;
+  goal = goal / (goalarea.end() - goalarea.begin());
+
+  nodes.push_back(START);
   
-  for(int p = 0; p < gpl; ++p)
+  typedef vector<GVertex>::iterator ivertex;
+  typedef vector<Shape>::iterator ishape;
+  
+  // fill up nodes array, include start and goal points,
+  // exclude any points that are inside obstacles
+  for(ivertex v = gvertices.begin(); v != gvertices.end(); ++v)
+  {
+    double th;  
+  
+    bool reject = false;
+    for(ishape shape = gshapes.begin(); shape != gshapes.end(); ++shape)
+    {
+      int sv = shape->startidx; // start vertex
+      int nv = shape->vertices; // number of vertices
+      int ev = sv + nv;
+      bool inside = true;
+      for(int e = sv; e < ev; ++e) // for each edge of shape1
+      {
+        GVertex & P = gvertices[e];
+        GVertex & Q = gvertices[(e-sv+1)%nv + sv];
+        th = atan2(v->y - P.y, v->x - P.x) - atan2(Q.y - P.y, Q.x - P.x);
+        if(sin(th) > 0)
+        {
+          inside = false;
+          break;
+        }  
+      };
+      if (inside)
+      {
+        reject = true;
+        break;
+      }
+    }
+    if (!reject)
+    {
+      nodes.push_back(v - gvertices.begin());
+    }
+  }  
+  nodes.push_back(GOAL);
+  
+
+
+  int gpl = nodes.size();
+  
+  for(int p = 0; p < gpl; ++p) // try each potential visiblity graph edge
   for(int q = 0; q < p; ++q)
   {
-    GVertex & P = gvertices[p];
-    GVertex & Q = gvertices[q];
-    if (P.shapeno == Q.shapeno)
+    GVertex & P = get_node(p);
+    GVertex & Q = get_node(q);
+    if (P.shapeno == Q.shapeno && P.shapeno >= 0)
     {
       int nv = shapes[P.shapeno].vertices;
-      visibility(p,q) = (p-q == 1 || p-q == nv-1);
+      isvisible(p,q) = (p - q== 1 || p - q == gshapes[P.shapeno].vertices - 1);
     }
     else
     {
       bool visible = true;
+      // 
       for(ishape shape = gshapes.begin(); shape != gshapes.end(); ++shape) 
       {
         int sv = shape->startidx;   // start vertex
@@ -354,8 +431,7 @@ void World::makeVisibility()
         for(int e = sv; e < ev; ++e) // for each edge of shape
         {
           GVertex & R = gvertices[e];
-          GVertex & S = gvertices[(e+1)%nv];
-          
+          GVertex & S = gvertices[(e-sv+1)%nv + sv];
           if (linesIntersect(P,Q,R,S))
           if (true)
           {
@@ -365,13 +441,83 @@ void World::makeVisibility()
         }        
       }
       notvisible:
-      visibility(p,q) = visible;
+      isvisible(p,q) = visible;
+      
+      if (visible)
+        distanceCache(p,q) = P.distanceTo(Q);
     }
   }
 }  
 
+
+struct _World_findPath_IntDist // metrowerks won't allow this to be instantiated if it is declared inside the function
+{
+  double d;
+  int i;
+  bool visited;
+  _World_findPath_IntDist() : i(-1), d(100000) {}
+};
+
 void World::findPath()
 {
+  typedef _World_findPath_IntDist IntDist;
+  
+  path.clear();
+
+  vector<IntDist> d(nodes.size());
+  vector<int> heap;
+  for(int i = 0; i < nodes.size(); ++i)
+    heap.push_back(i);
+
+  d[0].d = 0; // start node;
+
+  // heap comparison functor
+  class pcompare
+  {
+  public:
+
+    vector<IntDist> & d;
+    pcompare(vector<IntDist> & d_) : d(d_) { }
+    operator()(int a, int b)
+    {
+      return d[a].d > d[b].d; // priority_queue puts max first
+    }
+  };
+  
+  while(heap.size() > 0) 
+  {
+    make_heap(heap.begin(),heap.end(),pcompare(d));
+    
+    int v = heap[0];
+    pop_heap(heap.begin(),heap.end(),pcompare(d));
+    heap.pop_back();
+    
+    IntDist & V = d[v];
+    V.visited = true;
+    
+    for(int w = 0; w <= nodes.size(); ++w)
+    if (isvisible(v,w))
+    {
+      IntDist & W = d[w];
+      if (!W.visited)
+      {
+        double Wdistance = V.d + distanceCache(v,w);
+        if (Wdistance < W.d)
+          W.d = Wdistance;
+        W.i = v;  
+      }    
+    }
+  }
+  
+  int i = d.size() - 1;
+  for(;;)
+  {
+    path.push_back(i);
+    int next = d[i].i;
+    if (next <= 0) break;
+    i = next;
+  }
+  reverse(path.begin(), path.end());
 }
 
 template<class InputIterator>
@@ -466,6 +612,4 @@ void main()
   w.outputShapes(fp, w.vertices.begin(), w.vertices.end());
   w.outputShapes(fp, w.gvertices.begin(), w.gvertices.end());
   fclose(fp);
-  
-  
 }
