@@ -28,12 +28,13 @@ sfprocess *scan_proc;
 
 int thresh = 2;
 
-Point vertices[] = { { 4700, 1700 },
-		     { 4300, 2600 },
-		     { 3000, 2600 },
-		     { 3000, 4200 },
-		     { 4600, 4400 },
-		     { 4700, 6000 } };
+Point vertices[] = { { 4234, 475 },
+		     { 4400, 1200 },
+		     { 4500, 2200 },
+		     { 4300, 3200 },
+		     { 4300, 3600 },
+		     { 4500, 4600 },
+		     { 4500, 5900 } };
 Point robot_pos;
 IntList *path = 0;
 IntList *current = 0;
@@ -67,6 +68,13 @@ void int_print(IntList *l) {
   else printf(">\n");
 }
 
+Point get_robot_position() {
+  Point pos;
+  pos.x = 4235 - sfRobot.ay;
+  pos.y = sfRobot.ax + 475;
+  return pos;
+}
+
 void follow_points(void) {
   switch(process_state) {
   case sfINIT:
@@ -90,12 +98,60 @@ void follow_points(void) {
     if(sfDonePosition(100)) {
       current = current->next;
       if(!current) process_state = GOAL;
-      else process_state = DONE_MOVING;
+      else { /* process_state = DONE_MOVING;*/
+	robot_pos.x = 4235 - sfRobot.ay;
+	robot_pos.y = sfRobot.ax + 475;
+	sfSetHeading(angle_between(robot_pos, vertices[current->v])- 90);
+	process_state = ROTATING;	
+      }
     }
     break;
   case GOAL:
     break;
   }
+}
+
+#define RADIUS 220.0
+
+IntList *last;
+
+void fast_follow(void) {
+  Point pos = get_robot_position();
+  int side;
+  int th; int d;
+
+  printf("read %f\n", sfTargetHead());
+
+  /* special case when on last vertex */
+  if(!current->next) {
+    sfSetHeading(angle_between(pos, vertices[current->v]) - 90);
+    sfSetPosition(distance_between(pos, vertices[current->v]));
+    return;
+  }
+
+  /* we start looking at the next point when we are within
+     RADIUS of the current one */
+  if(distance_between(pos, vertices[current->v]) < RADIUS) {
+    last = current;
+    current = current->next;
+    if(!current->next) return;
+  }
+
+  th = angle_between(pos, vertices[current->v]) - 90;
+  d = distance_between(pos, vertices[current->v]);
+
+  /* look at next corner to adjust heading */
+  side = angle_between(vertices[last->v], vertices[current->v]) -
+    angle_between(vertices[current->v], vertices[current->next->v]);
+  if(side < 0) /* left turn */
+    th -= asin(RADIUS/d);
+  else if(side > 0) /* right turn */
+    th += asin(RADIUS/d);
+  /* else do nothing (straight) */
+
+  sfSetHeading(th);
+  printf("set %d\n", th);
+  sfSetPosition(d);
 }
 
 void myStartup(void)
@@ -106,7 +162,7 @@ void myStartup(void)
 
 void myConnect(void)
 {
-  sfSetMaxVelocity(200);
+  sfSetMaxVelocity(700);
   path = malloc(sizeof(IntList));
   path->v = -1;
   path->next = 0;
@@ -116,8 +172,9 @@ void myConnect(void)
   int_append(path, 3);
   int_append(path, 4);
   int_append(path, 5);
+  int_append(path, 6);
   current = path->next;
-  sfInitProcess(follow_points, "follow_points");
+  sfInitProcess(fast_follow, "fast_follow");
 }
 
 #ifdef IS_UNIX
